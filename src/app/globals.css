@@ -1,0 +1,79 @@
+/*
+ * Phase 0 baseline styles only. The real interface design (queue screens,
+ * per-item check UI) lands in Phase 1.
+ */
+:root {
+  --ink: #1a1c1e;
+  --paper: #fafaf8;
+  --muted: #6b6f76;
+  --line: #e3e2de;
+  --accent: #0f4c3a; /* deep bottle green — factory ledger, not startup blue */
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+main {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 48px 20px;
+}
+
+h1 {
+  font-size: 22px;
+  letter-spacing: -0.01em;
+  margin: 0 0 4px;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 20px;
+  margin-top: 20px;
+}
+
+.role-chip {
+  display: inline-block;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+button.primary {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+button.plain {
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 14px;
+  cursor: pointer;
+  color: var(--ink);
+}
