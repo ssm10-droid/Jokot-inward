@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import bcrypt from "bcryptjs";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { SETUP_STATEMENTS } from "@/lib/setup-sql";
@@ -41,30 +42,39 @@ async function runSetup(formData: FormData): Promise<Result> {
   }
   lines.push("Tables created (or already present).");
 
-  // 2. Users — one per line: email, name, role
+  // 2. Users — one per line: email, name, role, password
+  // Re-running with a new password resets that user's password.
+  // Omit the password (3 fields) to update name/role without touching it.
   const userText = String(formData.get("users") ?? "").trim();
   let added = 0;
   if (userText) {
     for (const rawLine of userText.split("\n")) {
       const parts = rawLine.split(",").map((s) => s.trim());
       if (parts.length < 3 || !parts[0]) continue;
-      const [email, name, roleRaw] = parts;
+      const [email, name, roleRaw, password] = parts;
       const role = roleRaw.toLowerCase();
       if (!VALID_ROLES.includes(role)) {
         lines.push(`Skipped ${email}: unknown role "${roleRaw}".`);
         continue;
       }
+      if (password && password.length < 6) {
+        lines.push(`Skipped ${email}: password must be 6+ characters.`);
+        continue;
+      }
+      const passwordHash = password ? await bcrypt.hash(password, 10) : null;
+      const baseSet = { name, role: role as never, active: true };
       await db
         .insert(users)
         .values({
           email: email.toLowerCase(),
           name,
           role: role as (typeof users.$inferInsert)["role"],
+          passwordHash,
           active: true,
         })
         .onConflictDoUpdate({
           target: users.email,
-          set: { name, role: role as never, active: true },
+          set: passwordHash ? { ...baseSet, passwordHash } : baseSet,
         });
       added++;
     }
@@ -146,16 +156,17 @@ export default async function SetupPage({
           />
 
           <label className="muted">
-            Users — one per line: email, name, role
+            Users — one per line: email, name, role, password
             <br />
-            (roles: gate, store, purchase, accounts, partner)
+            (roles: gate, store, purchase, accounts, partner — password 6+
+            characters; re-run with a new password to reset one)
           </label>
           <textarea
             name="users"
             rows={6}
             style={{ ...inputStyle, fontFamily: "monospace", fontSize: 13 }}
             placeholder={
-              "shashank@example.com, Shashank, partner\ngate@example.com, Gate Security, gate"
+              "shashank@jokot.in, Shashank, partner, MyPass123\ngate@jokot.in, Gate Security, gate, Gate2026"
             }
           />
 

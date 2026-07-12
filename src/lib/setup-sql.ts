@@ -22,8 +22,12 @@ export const SETUP_STATEMENTS: string[] = [
     "email" text PRIMARY KEY,
     "name" text NOT NULL,
     "role" "role" NOT NULL,
+    "password_hash" text,
     "active" boolean NOT NULL DEFAULT true
   )`,
+
+  // For databases created before password auth existed
+  `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "password_hash" text`,
 
   `CREATE TABLE IF NOT EXISTS "vendors" (
     "name" text PRIMARY KEY,

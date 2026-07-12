@@ -16,6 +16,8 @@ work end to end.
 - **Roles are database-authoritative** (`src/lib/authz.ts`). The session
   token's role is display-only; every server action re-reads the role by
   email. Deactivating a user in the `users` table locks them out instantly.
+- **Auth is email + password** (Credentials provider, bcrypt hashes in the
+  users table) — no external identity provider to configure.
 - **ID sequences use an atomic counter table** (`src/lib/ids.ts`), not
   MAX()+1 — safe when two people submit at the same moment. `PB26-####`
   continues from the AppSheet sequence via the seed script.
@@ -31,17 +33,18 @@ work end to end.
 Everything below works from a phone browser:
 
 1. **Neon** (neon.tech): create project, copy the pooled `DATABASE_URL`.
-2. **Google OAuth** (console.cloud.google.com): create OAuth web client,
-   redirect URI `https://<your-app>.vercel.app/api/auth/callback/google`.
-3. **Vercel** (vercel.com): import the GitHub repo, add env vars
-   `DATABASE_URL`, `AUTH_SECRET` (any long random string), `AUTH_GOOGLE_ID`,
-   `AUTH_GOOGLE_SECRET`, `SETUP_SECRET` (another random string you invent).
-   Deploy.
-4. Visit `https://<your-app>.vercel.app/setup`, enter the SETUP_SECRET,
-   paste the team's emails/roles, put in the highest existing AppSheet bill
-   number. Submit — this creates all tables and users.
-5. Go to the app home page, sign in with Google. The role chip is the
-   Phase 0 checkpoint.
+2. **Vercel** (vercel.com): import the GitHub repo, add env vars
+   `DATABASE_URL`, `AUTH_SECRET` (any long random string), `SETUP_SECRET`
+   (another random string you invent). Deploy.
+3. Visit `https://<your-app>.vercel.app/setup`, enter the SETUP_SECRET,
+   paste the team as `email, name, role, password` lines, put in the
+   highest existing AppSheet bill number. Submit — creates all tables
+   and users.
+4. Go to the app home page, sign in with email + password. The role chip
+   is the Phase 0 checkpoint.
+
+Auth is email + password against the users table (bcrypt-hashed).
+Passwords are set and reset only via /setup (partner holds SETUP_SECRET).
 
 ## Setup — laptop path (~30 minutes)
 

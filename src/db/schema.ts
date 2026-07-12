@@ -57,6 +57,7 @@ export const users = pgTable("users", {
   email: text("email").primaryKey(), // always stored lowercase
   name: text("name").notNull(),
   role: roleEnum("role").notNull(),
+  passwordHash: text("password_hash"), // bcrypt; null = cannot sign in yet
   active: boolean("active").notNull().default(true),
 });
 
