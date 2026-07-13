@@ -3,10 +3,19 @@
 Purchase-bill inward tracking for Jokot International. Replaces the
 AppSheet build with a custom Next.js app on Vercel + Neon Postgres.
 
-**Status: Phase 2 complete** — Price Approvals, per-item rate check,
-Approve Rates with the discrepancy-details gate, Raise Query as an
-independent side-channel, and a Vendor Issues screen that resolves both
-shortages and price queries.
+**Status: Phase 3 complete** — Post to Tally (accounts role), Dashboard
+(per-queue counts, 48h stuck-bill flags). Core workflow — Gate through
+Accounts — is now fully built end to end. Only Phase 4 (notifications)
+remains, and the plan is to hold off until the core flow has run in
+real use for a week or two.
+
+## Phase 3 routes
+
+```
+/accounts          accounts — queue of bills ready for Tally posting
+/accounts/[id]     accounts — enter voucher number, post
+/dashboard         any role — pipeline counts + stuck-bill list
+```
 
 ## Phase 2 routes
 
