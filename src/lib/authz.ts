@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
@@ -37,5 +38,25 @@ export async function requireUser(): Promise<User> {
   if (!email) throw new AuthzError("Not signed in.");
   const row = await db.query.users.findFirst({ where: eq(users.email, email) });
   if (!row || !row.active) throw new AuthzError("Account not active.");
+  return row;
+}
+
+/**
+ * Page-level guard for server components. Redirects (rather than throwing)
+ * on auth/role failure, since a page render can't surface a caught error
+ * the way a form submission can.
+ */
+export async function requirePageRole(allowed: Role | Role[]): Promise<User> {
+  const session = await auth();
+  if (!session?.user?.email) redirect("/login");
+
+  const email = session.user.email.toLowerCase();
+  const row = await db.query.users.findFirst({ where: eq(users.email, email) });
+  if (!row || !row.active) redirect("/login");
+
+  const allowedList = Array.isArray(allowed) ? allowed : [allowed];
+  if (!allowedList.includes(row.role)) {
+    redirect(`/?denied=${row.role}`);
+  }
   return row;
 }

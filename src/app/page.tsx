@@ -1,37 +1,117 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/authz";
 import { signOut } from "@/auth";
+import { listGrnQueue, listPriceQueue, recentBills } from "@/lib/data";
+import { deriveStage } from "@/lib/derive";
 
-/**
- * Phase 0 landing: proves end to end that Google sign-in works, the email
- * is matched against the users table, and the role comes from the database.
- * Phase 1 replaces this with role-appropriate queue screens.
- */
-export default async function Home() {
+const STAGE_LABEL: Record<string, string> = {
+  under_review: "Under review",
+  vendor_issue: "Vendor issue",
+  ready_for_accounts: "Ready for accounts",
+  in_tally: "Posted to Tally",
+};
+
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   let user;
   try {
     user = await requireUser();
   } catch {
     redirect("/login");
   }
+  const params = await searchParams;
+  const denied = typeof params.denied === "string" ? params.denied : null;
+
+  const [grnQueue, priceQueue, recent] = await Promise.all([
+    ["store", "partner"].includes(user.role) ? listGrnQueue() : Promise.resolve([]),
+    ["purchase", "partner"].includes(user.role) ? listPriceQueue() : Promise.resolve([]),
+    ["partner", "accounts"].includes(user.role) ? recentBills(10) : Promise.resolve([]),
+  ]);
 
   return (
     <main>
       <h1>Jokot Inward</h1>
-      <p className="muted">Foundation check — Phase 0</p>
+      <p className="muted">
+        Signed in as <strong>{user.name}</strong> ·{" "}
+        <span className="role-chip">{user.role}</span>
+      </p>
+
+      {denied && (
+        <div className="card" style={{ borderColor: "#b3261e" }}>
+          <p style={{ margin: 0 }}>
+            That page is for a different role — you're signed in as{" "}
+            <strong>{denied}</strong>.
+          </p>
+        </div>
+      )}
+
+      {user.role === "gate" && (
+        <Link href="/bills/new">
+          <button className="primary" style={{ width: "100%", marginTop: 12 }}>
+            + New Bill
+          </button>
+        </Link>
+      )}
+
+      {(user.role === "store" || user.role === "partner") && (
+        <Link href="/grn" style={{ textDecoration: "none", color: "inherit" }}>
+          <div className="card">
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <strong>GRN Queue</strong>
+              <span className="role-chip">{grnQueue.length}</span>
+            </div>
+            <p className="muted" style={{ margin: "4px 0 0" }}>
+              Bills awaiting quantity check
+            </p>
+          </div>
+        </Link>
+      )}
+
+      {(user.role === "purchase" || user.role === "partner") && (
+        <div className="card">
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <strong>Price Approvals</strong>
+            <span className="role-chip">{priceQueue.length}</span>
+          </div>
+          <p className="muted" style={{ margin: "4px 0 0" }}>
+            Coming in Phase 2
+          </p>
+        </div>
+      )}
+
+      {(user.role === "partner" || user.role === "accounts") && recent.length > 0 && (
+        <div className="card">
+          <p style={{ margin: "0 0 10px", fontWeight: 600 }}>Recent bills</p>
+          {recent.map((b) => {
+            const stage = deriveStage(b);
+            return (
+              <Link
+                key={b.id}
+                href={`/bills/${b.id}`}
+                style={{ textDecoration: "none", color: "inherit" }}
+              >
+                <div className="itemLine">
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span>{b.id}</span>
+                    <span className="muted" style={{ fontSize: 13 }}>
+                      {STAGE_LABEL[stage]}
+                    </span>
+                  </div>
+                  <p className="muted" style={{ margin: "2px 0 0", fontSize: 13 }}>
+                    {b.vendorName}
+                  </p>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+
       <div className="card">
-        <p style={{ margin: "0 0 8px" }}>
-          Signed in as <strong>{user.name}</strong>
-          <br />
-          <span className="muted">{user.email}</span>
-        </p>
-        <p style={{ margin: "12px 0" }}>
-          Role from database: <span className="role-chip">{user.role}</span>
-        </p>
-        <p className="muted" style={{ margin: "12px 0 16px" }}>
-          If this chip shows the right role for this account, auth and the
-          role lookup are working. Next: Gate entry and the GRN queue.
-        </p>
         <form
           action={async () => {
             "use server";
@@ -43,6 +123,11 @@ export default async function Home() {
           </button>
         </form>
       </div>
+
+      <style>{`
+        .itemLine { padding: 8px 0; border-bottom: 1px solid var(--line); }
+        .itemLine:last-child { border-bottom: none; }
+      `}</style>
     </main>
   );
 }

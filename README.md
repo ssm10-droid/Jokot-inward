@@ -3,9 +3,32 @@
 Purchase-bill inward tracking for Jokot International. Replaces the
 AppSheet build with a custom Next.js app on Vercel + Neon Postgres.
 
-**Status: Phase 0** — schema, auth, role lookup, seed tooling. No workflow
-screens yet; the landing page just proves sign-in and database-backed roles
-work end to end.
+**Status: Phase 1 complete** — Gate entry, GRN Queue, per-item quantity
+check, Confirm GRN with the shortage-details gate, GRN Note + Vendor
+Shortage Note PDFs, bill detail/audit view, role-based home screen.
+
+## One new setup step for Phase 1: Blob storage
+
+Bill photos and generated PDFs need file storage. In Vercel:
+**Storage** tab → **Create Database** → **Blob** → connect it to this
+project. `BLOB_READ_WRITE_TOKEN` is injected automatically — nothing to
+add to `.env` by hand. Do this before testing New Bill or Confirm GRN.
+
+## Phase 1 routes
+
+```
+/bills/new       gate — create bill + line items, camera-capture photo
+/bills/[id]       any role — read-only detail, computed stage, audit trail
+/grn              store — queue of bills awaiting quantity check
+/grn/[id]         store — per-item OK/Short marking, Confirm GRN
+```
+
+`src/app/bills/new/actions.ts` and `src/app/grn/[id]/actions.ts` hold the
+state-transition logic (createBillAction, markItemCheckAction,
+confirmGrnAction) — each does role check → precondition check → mutation
+→ audit log entry, matching the "keep it server-side and centralized"
+principle from the spec. `confirmGrnAction` is the one enforcing
+`shortageDetailsFilled` at the forward action, not at the status change.
 
 ## Architecture decisions locked in Phase 0
 
