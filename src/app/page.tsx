@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/authz";
 import { signOut } from "@/auth";
-import { listGrnQueue, listPriceQueue, listVendorIssues, listPriceQueries, recentBills } from "@/lib/data";
+import { listGrnQueue, listPriceQueue, listVendorIssues, listPriceQueries, listReadyForAccounts, recentBills } from "@/lib/data";
 import { deriveStage } from "@/lib/derive";
 
 const STAGE_LABEL: Record<string, string> = {
@@ -26,13 +26,15 @@ export default async function Home({
   const params = await searchParams;
   const denied = typeof params.denied === "string" ? params.denied : null;
 
-  const [grnQueue, priceQueue, shortages, priceQueries, recent] = await Promise.all([
+  const [grnQueue, priceQueue, shortages, priceQueries, readyList, recent] = await Promise.all([
     ["store", "partner"].includes(user.role) ? listGrnQueue() : Promise.resolve([]),
     ["purchase", "partner"].includes(user.role) ? listPriceQueue() : Promise.resolve([]),
     ["purchase", "partner"].includes(user.role) ? listVendorIssues() : Promise.resolve([]),
     ["purchase", "partner"].includes(user.role) ? listPriceQueries() : Promise.resolve([]),
+    ["accounts", "partner"].includes(user.role) ? listReadyForAccounts() : Promise.resolve([]),
     ["partner", "accounts"].includes(user.role) ? recentBills(10) : Promise.resolve([]),
   ]);
+  const readyCount = readyList.length;
 
   return (
     <main>
@@ -41,6 +43,9 @@ export default async function Home({
         Signed in as <strong>{user.name}</strong> ·{" "}
         <span className="role-chip">{user.role}</span>
       </p>
+      <Link href="/dashboard" style={{ fontSize: 14 }}>
+        📊 Dashboard
+      </Link>
 
       {denied && (
         <div className="card" style={{ borderColor: "#b3261e" }}>
@@ -98,6 +103,20 @@ export default async function Home({
             </div>
             <p className="muted" style={{ margin: "4px 0 0" }}>
               Shortages and price queries to resolve
+            </p>
+          </div>
+        </Link>
+      )}
+
+      {(user.role === "accounts" || user.role === "partner") && (
+        <Link href="/accounts" style={{ textDecoration: "none", color: "inherit" }}>
+          <div className="card">
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <strong>Post to Tally</strong>
+              <span className="role-chip">{readyCount}</span>
+            </div>
+            <p className="muted" style={{ margin: "4px 0 0" }}>
+              Bills ready for accounts
             </p>
           </div>
         </Link>

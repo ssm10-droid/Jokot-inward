@@ -87,16 +87,39 @@ for Accounts automatically — nothing more for you to do on it.
 
 ## Accounts
 
-**Not built yet** — coming in the next phase. This section will cover
-posting confirmed bills to Tally once that screen exists.
+**What you do:** post confirmed bills to Tally once both the quantity and
+price sides are clear.
+
+1. Sign in → tap **Post to Tally** — every bill ready for you is listed
+2. Open a bill, type in the voucher number from Tally (you post the bill
+   in Tally first, then record that voucher number here)
+3. Tap **Post to Tally**
+
+That's it — the bill is now marked posted and drops out of your queue.
+There's no live connection to Tally itself; this just records that it's
+done.
+
+**Common issues:** a bill you expect to see isn't in the queue → check
+its bill detail page for "Waiting on" — it needs both Store and Purchase
+to have cleared it first.
 
 ---
 
-## Partner (full visibility)
+## Partner (full visibility, read-only)
 
-Sees everything above, read-and-act on all of it, plus recent bills on
-the home screen. No separate workflow — same screens as everyone else,
-just with every role's queue visible at once.
+Sees everything above — every bill, every queue, the Dashboard — but
+can't perform the role-specific actions (create a bill, confirm a GRN,
+approve rates, resolve an issue, post to Tally). That's a deliberate
+choice from the original spec: partner is for oversight, not for
+covering someone else's queue.
+
+If a partner account taps into a role's action screen directly, the app
+will redirect back home with a note that the page is for a different
+role — that's expected, not a bug.
+
+**Dashboard** (any role can view): counts across every queue, plus a
+list of bills with no progress in 48+ hours — a quick way to spot
+something that's fallen through the cracks.
 
 ---
 

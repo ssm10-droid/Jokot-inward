@@ -59,6 +59,12 @@ export default async function BillDetailPage({
             {bill.gateBy} · {new Date(bill.gateDate).toLocaleString("en-IN")}
           </span>
         </div>
+        {bill.tallyVoucherNo && (
+          <div className="row">
+            <span className="muted">Tally Voucher No.</span>
+            <span>{bill.tallyVoucherNo}</span>
+          </div>
+        )}
         {bill.grnNo && (
           <div className="row">
             <span className="muted">GRN No.</span>
@@ -112,6 +118,16 @@ export default async function BillDetailPage({
           <Link href="/issues">
             <button className="primary" style={{ marginTop: 4, width: "100%" }}>
               Resolve in Vendor Issues
+            </button>
+          </Link>
+        )}
+
+      {user.role === "accounts" &&
+        d.stage === "ready_for_accounts" &&
+        !bill.tallyVoucherNo && (
+          <Link href={`/accounts/${bill.id}`}>
+            <button className="primary" style={{ marginTop: 4, width: "100%" }}>
+              Post to Tally
             </button>
           </Link>
         )}

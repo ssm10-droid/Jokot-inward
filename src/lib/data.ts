@@ -1,4 +1,4 @@
-import { eq, and, desc, asc } from "drizzle-orm";
+import { eq, and, desc, asc, isNotNull, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import {
   vendors,
@@ -111,6 +111,22 @@ export async function listReadyForAccounts(): Promise<Bill[]> {
     orderBy: asc(bills.gateDate),
   });
   return rows.filter((b) => !b.tallyVoucherNo);
+}
+
+export async function listInTally(limit = 30): Promise<Bill[]> {
+  return db.query.bills.findMany({
+    where: isNotNull(bills.tallyVoucherNo),
+    orderBy: desc(bills.accountsPostedDate),
+    limit,
+  });
+}
+
+/** Every bill not yet posted to Tally — the pool Dashboard scans for stuck bills. */
+export async function listActiveBills(): Promise<Bill[]> {
+  return db.query.bills.findMany({
+    where: isNull(bills.tallyVoucherNo),
+    orderBy: asc(bills.updatedAt),
+  });
 }
 
 export async function billAudit(billId: string) {
