@@ -11,8 +11,14 @@ Shortage Note PDFs, bill detail/audit view, role-based home screen.
 
 Bill photos and generated PDFs need file storage. In Vercel:
 **Storage** tab → **Create Database** → **Blob** → connect it to this
-project. `BLOB_READ_WRITE_TOKEN` is injected automatically — nothing to
-add to `.env` by hand. Do this before testing New Bill or Confirm GRN.
+project, with **"Add a read-write token env var to this connection"**
+checked (easy to miss — it's unchecked by default). No new secret to add
+to `.env` by hand; the token is injected automatically.
+
+Files are stored **private** (matching this team's store policy) and
+served through `/files/[...path]`, an app route that checks the session
+before streaming anything — same authentication as every other page, no
+public/guessable URLs.
 
 ## Phase 1 routes
 
