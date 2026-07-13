@@ -23,8 +23,8 @@ async function runSetup(formData: FormData): Promise<Result> {
   "use server";
   const lines: string[] = [];
 
-  const secret = String(formData.get("secret") ?? "");
-  const expected = process.env.SETUP_SECRET;
+  const secret = String(formData.get("secret") ?? "").trim();
+  const expected = process.env.SETUP_SECRET?.trim();
   if (!expected || secret !== expected) {
     return {
       ok: false,
