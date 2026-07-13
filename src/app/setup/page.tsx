@@ -3,16 +3,76 @@ import bcrypt from "bcryptjs";
 import { db } from "@/db";
 import { users, vendors, items, supplierItemMap } from "@/db/schema";
 import { SETUP_STATEMENTS } from "@/lib/setup-sql";
+import masterImportData from "@/data/master-import.json";
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+/**
+ * One-time bulk import of the real vendor/item/mapping master data
+ * (cleaned and deduped from the AppSheet export — see the chat where this
+ * was generated for the cleaning steps). Bundled as JSON at build time so
+ * this needs no paste-into-a-textarea step, and — importantly — several
+ * real vendor names contain commas ("CEYENAR CHEMICALS PVT.LTD, Kerala"),
+ * which would silently corrupt the comma-delimited textarea format below.
+ * JSON has no such fragility.
+ *
+ * Batched inserts (not one row at a time) to stay well inside Vercel's
+ * function time limit — ~806 rows in a handful of round trips instead of
+ * hundreds. onConflictDoNothing: this is an initial-seed operation, so it
+ * must never clobber data added or edited by hand afterward.
+ */
+async function importBundledMasterData(): Promise<string> {
+  let vendorsAdded = 0;
+  let itemsAdded = 0;
+  let mapAdded = 0;
+
+  for (const batch of chunk(masterImportData.vendors, 200)) {
+    const result = await db
+      .insert(vendors)
+      .values(batch)
+      .onConflictDoNothing()
+      .returning({ name: vendors.name });
+    vendorsAdded += result.length;
+  }
+
+  for (const batch of chunk(masterImportData.items, 200)) {
+    const result = await db
+      .insert(items)
+      .values(batch.map((i) => ({ ...i, type: "stock" as const })))
+      .onConflictDoNothing()
+      .returning({ name: items.name });
+    itemsAdded += result.length;
+  }
+
+  for (const batch of chunk(masterImportData.supplierItemMap, 200)) {
+    const result = await db
+      .insert(supplierItemMap)
+      .values(
+        batch.map((m) => ({
+          id: `${m.supplierName}::${m.itemName}`,
+          supplierName: m.supplierName,
+          itemName: m.itemName,
+          isActive: true,
+        }))
+      )
+      .onConflictDoNothing()
+      .returning({ id: supplierItemMap.id });
+    mapAdded += result.length;
+  }
+
+  return `Bundled master data imported: ${vendorsAdded} new vendors, ${itemsAdded} new items, ${mapAdded} new vendor-item mappings (existing rows left untouched).`;
+}
 
 /**
  * Phone-only setup. Visit /setup after deploying, enter the SETUP_SECRET
- * you configured in Vercel env vars, paste the user list, and submit.
- * Creates all tables (idempotent), upserts users, and sets the PB26 bill
- * counter. Safe to run again later to add users or bump the counter.
- *
- * Master data (vendors / items / supplier map) is intentionally not here —
- * that arrives with Phase 1's data screens or a CSV upload. The Phase 0
- * checkpoint only needs users.
+ * you configured in Vercel env vars, then submit whichever sections you
+ * need — tables always get (re)created, and everything else (bundled
+ * master-data import, users, vendors, items, mapping, bill counter) is
+ * independently optional and safe to rerun anytime.
  */
 
 const VALID_ROLES = ["gate", "store", "purchase", "accounts", "partner"];
@@ -41,6 +101,11 @@ async function runSetup(formData: FormData): Promise<Result> {
     await db.execute(sql.raw(stmt));
   }
   lines.push("Tables created (or already present).");
+
+  // 1.5 Bundled master data import (one-time, real vendor/item/mapping data)
+  if (formData.get("importBundled") === "on") {
+    lines.push(await importBundledMasterData());
+  }
 
   // 2. Users — one per line: email, name, role, password
   // Re-running with a new password resets that user's password.
@@ -226,6 +291,26 @@ export default async function SetupPage({
             style={inputStyle}
             autoComplete="off"
           />
+
+          <div
+            style={{
+              border: "1px solid var(--accent)",
+              borderRadius: 8,
+              padding: 12,
+              margin: "0 0 16px",
+              background: "#f2f7f5",
+            }}
+          >
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+              <input type="checkbox" name="importBundled" style={{ marginTop: 3 }} />
+              <span style={{ fontSize: 14 }}>
+                Import the real vendor/item/mapping data from the AppSheet
+                export (88 vendors, 317 items, 401 vendor-item mappings).
+                Safe to check every time you run setup — already-imported
+                rows are skipped, nothing gets overwritten.
+              </span>
+            </label>
+          </div>
 
           <label className="muted">
             Users — one per line: email, name, role, password
