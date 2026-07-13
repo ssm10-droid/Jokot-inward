@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { users, vendors, items } from "@/db/schema";
 import { SETUP_STATEMENTS } from "@/lib/setup-sql";
 
 /**
@@ -81,7 +81,53 @@ async function runSetup(formData: FormData): Promise<Result> {
     lines.push(`Users added/updated: ${added}.`);
   }
 
-  // 3. Bill counter
+  // 3. Vendors — one per line: name, state, gstin
+  // (state/gstin optional; leave blank/omit if unknown for now)
+  const vendorText = String(formData.get("vendors") ?? "").trim();
+  let vendorsAdded = 0;
+  if (vendorText) {
+    for (const rawLine of vendorText.split("\n")) {
+      const parts = rawLine.split(",").map((s) => s.trim());
+      const name = parts[0];
+      if (!name) continue;
+      const state = parts[1] || null;
+      const gstin = parts[2] || null;
+      await db
+        .insert(vendors)
+        .values({ name, state, gstin })
+        .onConflictDoUpdate({
+          target: vendors.name,
+          set: { state, gstin },
+        });
+      vendorsAdded++;
+    }
+    lines.push(`Vendors added/updated: ${vendorsAdded}.`);
+  }
+
+  // 4. Items — one per line: name, uom, gst_pct
+  // (uom/gst_pct optional; type defaults to "stock")
+  const itemText = String(formData.get("items") ?? "").trim();
+  let itemsAdded = 0;
+  if (itemText) {
+    for (const rawLine of itemText.split("\n")) {
+      const parts = rawLine.split(",").map((s) => s.trim());
+      const name = parts[0];
+      if (!name) continue;
+      const uom = parts[1] || null;
+      const gstPct = parts[2] || null;
+      await db
+        .insert(items)
+        .values({ name, uom, gstPct, type: "stock" })
+        .onConflictDoUpdate({
+          target: items.name,
+          set: { uom, gstPct },
+        });
+      itemsAdded++;
+    }
+    lines.push(`Items added/updated: ${itemsAdded}.`);
+  }
+
+  // 5. Bill counter
   const lastBillRaw = String(formData.get("lastBill") ?? "").trim();
   if (lastBillRaw) {
     const n = parseInt(lastBillRaw, 10);
@@ -168,6 +214,31 @@ export default async function SetupPage({
             placeholder={
               "shashank@jokot.in, Shashank, partner, MyPass123\ngate@jokot.in, Gate Security, gate, Gate2026"
             }
+          />
+
+          <label className="muted">
+            Vendors — one per line: name, state, gstin
+            <br />
+            (state/gstin optional — leave them off if you don't have them
+            yet; re-run anytime to add more vendors)
+          </label>
+          <textarea
+            name="vendors"
+            rows={5}
+            style={{ ...inputStyle, fontFamily: "monospace", fontSize: 13 }}
+            placeholder={"Uttam Rubbers\nSri Lakshmi Traders, Karnataka\nABC Chemicals, Tamil Nadu, 33ABCDE1234F1Z5"}
+          />
+
+          <label className="muted">
+            Items — one per line: name, uom, gst_pct
+            <br />
+            (uom/gst_pct optional — re-run anytime to add more items)
+          </label>
+          <textarea
+            name="items"
+            rows={5}
+            style={{ ...inputStyle, fontFamily: "monospace", fontSize: 13 }}
+            placeholder={"EVA Slipper Gents 9, PR\nPU Sandal Ladies 6, PR, 18\nMCR Ortho Insole, PR"}
           />
 
           <label className="muted">
