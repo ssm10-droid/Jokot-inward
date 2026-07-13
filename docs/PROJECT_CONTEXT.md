@@ -37,6 +37,18 @@ recorded. Full original business-logic spec is in the repo's
 the "add a read-write token env var" checkbox must be checked when
 connecting, it's unchecked by default and easy to miss).
 
+### Bundled master-data import
+`src/data/master-import.json` — 88 vendors, 317 items, 401 vendor-item
+mappings, cleaned and deduped from the real AppSheet export (Vendor
+Master, Item Master, Supplier Item Map sheets). Imported via a checkbox
+on `/setup`, batched in groups of 200 with `onConflictDoNothing()` — not
+a paste-into-textarea flow, because several real vendor names contain
+commas (e.g. "CEYENAR CHEMICALS PVT.LTD, Kerala") which would corrupt on
+a naive comma-split. If the source Excel changes, regenerate this JSON
+with the same cleaning steps (dedupe by trimmed name, normalize
+whitespace so Supplier Item Map's vendor names match Vendor Master
+exactly) rather than hand-editing it.
+
 ### CSV export for Google Sheets
 `/export/{bills,bill-items,vendors,items,supplier-item-map}?token=...`,
 checked against `EXPORT_TOKEN` (trimmed both sides). Deliberately
