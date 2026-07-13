@@ -32,10 +32,17 @@ recorded. Full original business-logic spec is in the repo's
   anytime to add more of any of those or reset a password.
 
 ### Env vars (set in Vercel, not committed)
-`DATABASE_URL`, `AUTH_SECRET`, `SETUP_SECRET`, `BLOB_READ_WRITE_TOKEN`
-(auto-injected when the Blob store is connected — the "add a read-write
-token env var" checkbox must be checked when connecting, it's unchecked
-by default and easy to miss).
+`DATABASE_URL`, `AUTH_SECRET`, `SETUP_SECRET`, `EXPORT_TOKEN`,
+`BLOB_READ_WRITE_TOKEN` (auto-injected when the Blob store is connected —
+the "add a read-write token env var" checkbox must be checked when
+connecting, it's unchecked by default and easy to miss).
+
+### CSV export for Google Sheets
+`/export/{bills,bill-items,vendors,items,supplier-item-map}?token=...`,
+checked against `EXPORT_TOKEN` (trimmed both sides). Deliberately
+excluded from the session-required middleware in `src/auth.config.ts`
+since `IMPORTDATA` can't send a login cookie. Wired into a Google Sheet
+via `=IMPORTDATA("https://.../export/bills?token=...")` per tab.
 
 ## Everyone involved, non-technical
 

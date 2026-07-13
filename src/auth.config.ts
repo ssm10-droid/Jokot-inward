@@ -14,9 +14,11 @@ export const authConfig: NextAuthConfig = {
     authorized({ auth, request }) {
       const isLoggedIn = !!auth?.user;
       const path = request.nextUrl.pathname;
-      // /setup is protected by SETUP_SECRET instead of a session —
-      // it must be reachable before any user exists at all.
-      if (path.startsWith("/login") || path.startsWith("/setup")) return true;
+      // /setup is protected by SETUP_SECRET, /export by its own token
+      // param — neither can rely on a session (Google Sheets' IMPORTDATA
+      // can't send a login cookie), so both bypass the session check here.
+      if (path.startsWith("/login") || path.startsWith("/setup") || path.startsWith("/export"))
+        return true;
       return isLoggedIn; // false -> redirect to /login
     },
   },

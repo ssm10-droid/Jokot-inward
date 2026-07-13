@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { db } from "@/db";
-import { users, vendors, items } from "@/db/schema";
+import { users, vendors, items, supplierItemMap } from "@/db/schema";
 import { SETUP_STATEMENTS } from "@/lib/setup-sql";
 
 /**
@@ -127,7 +127,33 @@ async function runSetup(formData: FormData): Promise<Result> {
     lines.push(`Items added/updated: ${itemsAdded}.`);
   }
 
-  // 5. Bill counter
+  // 5. Vendor-item mapping — one per line: vendor_name, item_name, supplier_item_code
+  // (supplier_item_code optional; this is what filters the item picker per
+  // vendor at Gate — leave empty and every vendor just sees the full item
+  // list, which is also the built-in fallback if a vendor has no rows here)
+  const mapText = String(formData.get("vendorItemMap") ?? "").trim();
+  let mapAdded = 0;
+  if (mapText) {
+    for (const rawLine of mapText.split("\n")) {
+      const parts = rawLine.split(",").map((s) => s.trim());
+      const supplierName = parts[0];
+      const itemName = parts[1];
+      if (!supplierName || !itemName) continue;
+      const supplierItemCode = parts[2] || null;
+      const id = `${supplierName}::${itemName}`;
+      await db
+        .insert(supplierItemMap)
+        .values({ id, supplierName, itemName, supplierItemCode, isActive: true })
+        .onConflictDoUpdate({
+          target: supplierItemMap.id,
+          set: { supplierItemCode, isActive: true },
+        });
+      mapAdded++;
+    }
+    lines.push(`Vendor-item mappings added/updated: ${mapAdded}.`);
+  }
+
+  // 6. Bill counter
   const lastBillRaw = String(formData.get("lastBill") ?? "").trim();
   if (lastBillRaw) {
     const n = parseInt(lastBillRaw, 10);
@@ -239,6 +265,21 @@ export default async function SetupPage({
             rows={5}
             style={{ ...inputStyle, fontFamily: "monospace", fontSize: 13 }}
             placeholder={"EVA Slipper Gents 9, PR\nPU Sandal Ladies 6, PR, 18\nMCR Ortho Insole, PR"}
+          />
+
+          <label className="muted">
+            Vendor-item mapping — one per line: vendor name, item name,
+            supplier item code
+            <br />
+            (code optional — this filters which items show up for a given
+            vendor at Gate; leave a vendor out entirely and it just shows
+            the full item list)
+          </label>
+          <textarea
+            name="vendorItemMap"
+            rows={5}
+            style={{ ...inputStyle, fontFamily: "monospace", fontSize: 13 }}
+            placeholder={"Uttam Rubbers, EVA Slipper Gents 9\nUttam Rubbers, MCR Ortho Insole\nSri Lakshmi Traders, PU Sandal Ladies 6"}
           />
 
           <label className="muted">

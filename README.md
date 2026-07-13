@@ -3,19 +3,46 @@
 Purchase-bill inward tracking for Jokot International. Replaces the
 AppSheet build with a custom Next.js app on Vercel + Neon Postgres.
 
-**Status: Phase 3 complete** — Post to Tally (accounts role), Dashboard
-(per-queue counts, 48h stuck-bill flags). Core workflow — Gate through
-Accounts — is now fully built end to end. Only Phase 4 (notifications)
-remains, and the plan is to hold off until the core flow has run in
-real use for a week or two.
+**Status: Phase 3 complete**, plus master-data mapping and CSV exports —
+Post to Tally (accounts role), Dashboard (per-queue counts, 48h
+stuck-bill flags), vendor-item mapping via `/setup`, and live-refreshing
+CSV exports for Google Sheets. Core workflow — Gate through Accounts —
+is fully built end to end.
 
-## Phase 3 routes
+## Google Sheets live view
+
+Five CSV export routes, token-protected (no login session — Google
+Sheets can't send a cookie):
 
 ```
-/accounts          accounts — queue of bills ready for Tally posting
-/accounts/[id]     accounts — enter voucher number, post
-/dashboard         any role — pipeline counts + stuck-bill list
+/export/bills?token=...
+/export/bill-items?token=...
+/export/vendors?token=...
+/export/items?token=...
+/export/supplier-item-map?token=...
 ```
+
+Setup: add an `EXPORT_TOKEN` env var in Vercel (any long random string —
+treat it like a password, since anyone with the link can read this data,
+though not modify it). In a Google Sheet, on an empty tab, one formula
+per tab:
+
+```
+=IMPORTDATA("https://<your-app>.vercel.app/export/bills?token=YOUR_TOKEN")
+```
+
+Google refreshes `IMPORTDATA` roughly hourly on its own, or manually via
+the sheet's *Data → Refresh* (or select the cell and press Enter again).
+It's not instant-live, but close enough for a working reference view —
+building an actual push-sync to Sheets would need Google's API and OAuth,
+real added complexity for marginal benefit over this.
+
+## Master data via /setup
+
+Vendors, items, and vendor-item mapping (which filters the item picker
+per vendor at Gate) are all loaded the same phone-only way as users —
+paste lines into `/setup`, rerunnable anytime to add more. See the page
+itself for the exact line format of each box.
 
 ## Phase 2 routes
 
