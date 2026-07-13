@@ -104,25 +104,37 @@ export async function confirmGrnAction(billId: string): Promise<ActionState> {
     grnCheckedDate: now,
   };
 
-  const grnNoteBuf = await renderToBuffer(
-    GrnNoteDocument({ bill: billForPdf, items })
-  );
-  const grnNoteUrl = await uploadBuffer(
-    `bills/${billId}/grn-note.pdf`,
-    grnNoteBuf,
-    "application/pdf"
-  );
-
+  // PDF generation is best-effort: the GRN confirmation itself (the part
+  // that unblocks the workflow) must succeed even if PDF rendering or
+  // upload has a problem. A missing note can be regenerated later; a bill
+  // stuck un-confirmed because of a PDF hiccup cannot.
+  let grnNoteUrl: string | null = null;
   let vendorNoteUrl: string | null = null;
-  if (grnStatus === "short") {
-    const vendorNoteBuf = await renderToBuffer(
-      VendorShortageDocument({ bill: billForPdf, items })
+  try {
+    const grnNoteBuf = await renderToBuffer(
+      GrnNoteDocument({ bill: billForPdf, items })
     );
-    vendorNoteUrl = await uploadBuffer(
-      `bills/${billId}/vendor-shortage.pdf`,
-      vendorNoteBuf,
+    grnNoteUrl = await uploadBuffer(
+      `bills/${billId}/grn-note.pdf`,
+      grnNoteBuf,
       "application/pdf"
     );
+
+    if (grnStatus === "short") {
+      const vendorNoteBuf = await renderToBuffer(
+        VendorShortageDocument({ bill: billForPdf, items })
+      );
+      vendorNoteUrl = await uploadBuffer(
+        `bills/${billId}/vendor-shortage.pdf`,
+        vendorNoteBuf,
+        "application/pdf"
+      );
+    }
+  } catch (err) {
+    console.error("GRN PDF generation/upload failed:", err);
+    await logAction(billId, "grn_note_pdf_failed", actor.email, {
+      message: err instanceof Error ? err.message : String(err),
+    });
   }
 
   await db
