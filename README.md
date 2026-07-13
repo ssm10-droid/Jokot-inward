@@ -3,9 +3,40 @@
 Purchase-bill inward tracking for Jokot International. Replaces the
 AppSheet build with a custom Next.js app on Vercel + Neon Postgres.
 
-**Status: Phase 1 complete** — Gate entry, GRN Queue, per-item quantity
-check, Confirm GRN with the shortage-details gate, GRN Note + Vendor
-Shortage Note PDFs, bill detail/audit view, role-based home screen.
+**Status: Phase 2 complete** — Price Approvals, per-item rate check,
+Approve Rates with the discrepancy-details gate, Raise Query as an
+independent side-channel, and a Vendor Issues screen that resolves both
+shortages and price queries.
+
+## Phase 2 routes
+
+```
+/price            purchase — queue of bills awaiting rate check
+/price/[id]       purchase — per-item OK/Discrepancy marking, Approve Rates,
+                    or Raise Query (bill-level, independent of item marks)
+/issues           purchase — resolve shortages (debit note / replacement)
+                    and open price queries
+```
+
+### A judgment call worth knowing about
+
+The build spec defines `grn_status` as `pending | ok | short` and
+`price_status` as `pending | approved | query` — no fourth "resolved"
+state, and no automatic rule for what happens to those statuses once
+Purchase resolves an issue. Left as-is, a bill with any shortage or price
+query would sit at `vendor_issue` forever, even after it's genuinely
+settled, because `stage` only becomes `ready_for_accounts` when
+`grn_status='ok' AND price_status='approved'`.
+
+So resolving a shortage (either debit note or replacement) sets
+`grn_status` back to `'ok'`, and resolving a price query sets
+`price_status` to `'approved'` — both stamped with who resolved it and
+when, in `resolution_type`/`resolution_notes`/`issue_resolved_by`/
+`issue_resolved_date` and via the audit log. This is what lets a bill
+that had a real shortage still reach Accounts once everything's been
+sorted out administratively. Flagging this because it's a functional
+decision filling a gap the spec left open, not something restating spec
+behavior.
 
 ## One new setup step for Phase 1: Blob storage
 

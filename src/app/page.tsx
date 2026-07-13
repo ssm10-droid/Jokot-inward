@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/authz";
 import { signOut } from "@/auth";
-import { listGrnQueue, listPriceQueue, recentBills } from "@/lib/data";
+import { listGrnQueue, listPriceQueue, listVendorIssues, listPriceQueries, recentBills } from "@/lib/data";
 import { deriveStage } from "@/lib/derive";
 
 const STAGE_LABEL: Record<string, string> = {
@@ -26,9 +26,11 @@ export default async function Home({
   const params = await searchParams;
   const denied = typeof params.denied === "string" ? params.denied : null;
 
-  const [grnQueue, priceQueue, recent] = await Promise.all([
+  const [grnQueue, priceQueue, shortages, priceQueries, recent] = await Promise.all([
     ["store", "partner"].includes(user.role) ? listGrnQueue() : Promise.resolve([]),
     ["purchase", "partner"].includes(user.role) ? listPriceQueue() : Promise.resolve([]),
+    ["purchase", "partner"].includes(user.role) ? listVendorIssues() : Promise.resolve([]),
+    ["purchase", "partner"].includes(user.role) ? listPriceQueries() : Promise.resolve([]),
     ["partner", "accounts"].includes(user.role) ? recentBills(10) : Promise.resolve([]),
   ]);
 
@@ -72,15 +74,33 @@ export default async function Home({
       )}
 
       {(user.role === "purchase" || user.role === "partner") && (
-        <div className="card">
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <strong>Price Approvals</strong>
-            <span className="role-chip">{priceQueue.length}</span>
+        <Link href="/price" style={{ textDecoration: "none", color: "inherit" }}>
+          <div className="card">
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <strong>Price Approvals</strong>
+              <span className="role-chip">{priceQueue.length}</span>
+            </div>
+            <p className="muted" style={{ margin: "4px 0 0" }}>
+              Bills awaiting rate check
+            </p>
           </div>
-          <p className="muted" style={{ margin: "4px 0 0" }}>
-            Coming in Phase 2
-          </p>
-        </div>
+        </Link>
+      )}
+
+      {(user.role === "purchase" || user.role === "partner") && (
+        <Link href="/issues" style={{ textDecoration: "none", color: "inherit" }}>
+          <div className="card">
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <strong>Vendor Issues</strong>
+              <span className="role-chip">
+                {shortages.length + priceQueries.length}
+              </span>
+            </div>
+            <p className="muted" style={{ margin: "4px 0 0" }}>
+              Shortages and price queries to resolve
+            </p>
+          </div>
+        </Link>
       )}
 
       {(user.role === "partner" || user.role === "accounts") && recent.length > 0 && (

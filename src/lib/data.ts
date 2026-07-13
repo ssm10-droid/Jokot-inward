@@ -91,6 +91,13 @@ export async function listVendorIssues(): Promise<Bill[]> {
   });
 }
 
+export async function listPriceQueries(): Promise<Bill[]> {
+  return db.query.bills.findMany({
+    where: eq(bills.priceStatus, "query"),
+    orderBy: asc(bills.priceDate),
+  });
+}
+
 export async function listPriceQueue(): Promise<Bill[]> {
   return db.query.bills.findMany({
     where: eq(bills.priceStatus, "pending"),

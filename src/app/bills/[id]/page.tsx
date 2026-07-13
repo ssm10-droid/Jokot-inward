@@ -99,6 +99,23 @@ export default async function BillDetailPage({
         </Link>
       )}
 
+      {user.role === "purchase" && bill.priceStatus === "pending" && (
+        <Link href={`/price/${bill.id}`}>
+          <button className="primary" style={{ marginTop: 4, width: "100%" }}>
+            Check rates
+          </button>
+        </Link>
+      )}
+
+      {user.role === "purchase" &&
+        (bill.grnStatus === "short" || bill.priceStatus === "query") && (
+          <Link href="/issues">
+            <button className="primary" style={{ marginTop: 4, width: "100%" }}>
+              Resolve in Vendor Issues
+            </button>
+          </Link>
+        )}
+
       <div className="card">
         <p style={{ margin: "0 0 10px", fontWeight: 600 }}>Items</p>
         {items.map((it) => (
