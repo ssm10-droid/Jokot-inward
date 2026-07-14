@@ -43,9 +43,11 @@ export default async function Home({
         Signed in as <strong>{user.name}</strong> ·{" "}
         <span className="role-chip">{user.role}</span>
       </p>
-      <Link href="/dashboard" style={{ fontSize: 14 }}>
-        📊 Dashboard
-      </Link>
+      {user.role !== "gate" && (
+        <Link href="/dashboard" style={{ fontSize: 14 }}>
+          📊 Dashboard
+        </Link>
+      )}
 
       {denied && (
         <div className="card" style={{ borderColor: "#b3261e" }}>
@@ -57,11 +59,58 @@ export default async function Home({
       )}
 
       {user.role === "gate" && (
-        <Link href="/bills/new">
-          <button className="primary" style={{ width: "100%", marginTop: 12 }}>
-            + New Bill
-          </button>
-        </Link>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 14,
+            marginTop: 20,
+          }}
+        >
+          <Link href="/bills/new" style={{ textDecoration: "none" }}>
+            <div className="homeTile homeTilePrimary">
+              <svg
+                width="34"
+                height="34"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <path d="M14 2v6h6" />
+                <path d="M12 11v6" />
+                <path d="M9 14h6" />
+              </svg>
+              <span className="homeTileLabel">New Bill</span>
+              <span className="homeTileSub">Enter an incoming bill</span>
+            </div>
+          </Link>
+          <Link href="/dashboard" style={{ textDecoration: "none" }}>
+            <div className="homeTile">
+              <svg
+                width="34"
+                height="34"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <rect x="3" y="12" width="4" height="9" rx="1" />
+                <rect x="10" y="7" width="4" height="14" rx="1" />
+                <rect x="17" y="3" width="4" height="18" rx="1" />
+              </svg>
+              <span className="homeTileLabel">Dashboard</span>
+              <span className="homeTileSub">Queues &amp; stuck bills</span>
+            </div>
+          </Link>
+        </div>
       )}
 
       {(user.role === "store" || user.role === "partner") && (
@@ -166,6 +215,28 @@ export default async function Home({
       <style>{`
         .itemLine { padding: 8px 0; border-bottom: 1px solid var(--line); }
         .itemLine:last-child { border-bottom: none; }
+        .homeTile {
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: 14px;
+          padding: 26px 16px 22px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 10px;
+          color: var(--ink);
+          text-align: center;
+          min-height: 140px;
+          justify-content: center;
+        }
+        .homeTile:active { transform: scale(0.98); }
+        .homeTilePrimary {
+          background: var(--accent);
+          border-color: var(--accent);
+          color: #fff;
+        }
+        .homeTileLabel { font-size: 17px; font-weight: 600; }
+        .homeTileSub { font-size: 12.5px; opacity: 0.75; }
       `}</style>
     </main>
   );
