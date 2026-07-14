@@ -2,9 +2,13 @@ import { sql, eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { db } from "@/db";
 import { users, vendors, items, supplierItemMap, bills, billItems } from "@/db/schema";
-import { SETUP_STATEMENTS } from "@/lib/setup-sql";
+import { SETUP_STATEMENTS, MASTER_SYNC_COLUMNS } from "@/lib/setup-sql";
 import { buildSyncPlan, applySyncPlan, describePlan } from "@/lib/sheet-sync";
 import masterImportData from "@/data/master-import.json";
+
+// The sync action fetches three Google Sheets and runs several DB round
+// trips — give it more than the default serverless time budget.
+export const maxDuration = 60;
 
 // Published-to-web CSV links for the three master tabs of the Jokot master
 // Google Sheet — pre-filled in the sync form; editable there if the sheet
@@ -48,8 +52,9 @@ async function runSheetSync(formData: FormData): Promise<Result> {
   const apply = String(formData.get("mode")) === "apply";
 
   try {
-    // Make sure the new columns exist even on a database created earlier.
-    for (const stmt of SETUP_STATEMENTS) {
+    // Make sure the new columns exist even on a database created earlier
+    // (just the six ALTERs — the full DDL set runs in the main setup form).
+    for (const stmt of MASTER_SYNC_COLUMNS) {
       await db.execute(sql.raw(stmt));
     }
     const plan = await buildSyncPlan(vendorUrl, itemUrl, mapUrl);
@@ -312,18 +317,36 @@ export default async function SetupPage({
 
   async function syncAction(formData: FormData) {
     "use server";
-    const result = await runSheetSync(formData);
+    let result: Result;
+    try {
+      result = await runSheetSync(formData);
+    } catch (e) {
+      result = {
+        ok: false,
+        lines: [`Sync crashed: ${e instanceof Error ? e.message : "unknown error"}`],
+      };
+    }
     const { redirect } = await import("next/navigation");
-    const msg = encodeURIComponent(result.lines.join(" | "));
-    redirect(`/setup?done=${result.ok ? "1" : "0"}&msg=${msg}`);
+    let joined = result.lines.join(" | ");
+    if (joined.length > 1500) joined = joined.slice(0, 1500) + " …(truncated)";
+    redirect(`/setup?done=${result.ok ? "1" : "0"}&msg=${encodeURIComponent(joined)}`);
   }
 
   async function deleteAction(formData: FormData) {
     "use server";
-    const result = await runMasterDelete(formData);
+    let result: Result;
+    try {
+      result = await runMasterDelete(formData);
+    } catch (e) {
+      result = {
+        ok: false,
+        lines: [`Delete crashed: ${e instanceof Error ? e.message : "unknown error"}`],
+      };
+    }
     const { redirect } = await import("next/navigation");
-    const msg = encodeURIComponent(result.lines.join(" | "));
-    redirect(`/setup?done=${result.ok ? "1" : "0"}&msg=${msg}`);
+    let joined = result.lines.join(" | ");
+    if (joined.length > 1500) joined = joined.slice(0, 1500) + " …(truncated)";
+    redirect(`/setup?done=${result.ok ? "1" : "0"}&msg=${encodeURIComponent(joined)}`);
   }
 
   const params = await searchParams;

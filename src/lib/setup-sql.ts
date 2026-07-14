@@ -8,6 +8,20 @@
  * schema should update both (or move to proper drizzle migrations once a
  * laptop workflow exists).
  */
+/**
+ * Columns the Google-Sheets master-data sync needs — kept separate so the
+ * sync action can ensure just these exist (6 fast statements) instead of
+ * replaying the entire DDL set inside its time budget.
+ */
+export const MASTER_SYNC_COLUMNS: string[] = [
+  `ALTER TABLE "vendors" ADD COLUMN IF NOT EXISTS "vendor_group" text`,
+  `ALTER TABLE "vendors" ADD COLUMN IF NOT EXISTS "gst_reg_type" text`,
+  `ALTER TABLE "vendors" ADD COLUMN IF NOT EXISTS "active" boolean NOT NULL DEFAULT true`,
+  `ALTER TABLE "items" ADD COLUMN IF NOT EXISTS "item_group" text`,
+  `ALTER TABLE "items" ADD COLUMN IF NOT EXISTS "hsn_code" text`,
+  `ALTER TABLE "items" ADD COLUMN IF NOT EXISTS "active" boolean NOT NULL DEFAULT true`,
+];
+
 export const SETUP_STATEMENTS: string[] = [
   // Enums (CREATE TYPE has no IF NOT EXISTS; DO-block swallow duplicates)
   `DO $$ BEGIN CREATE TYPE "role" AS ENUM ('gate','store','purchase','accounts','partner'); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
@@ -29,13 +43,7 @@ export const SETUP_STATEMENTS: string[] = [
   // For databases created before password auth existed
   `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "password_hash" text`,
 
-  // For databases created before the Google-Sheets master-data sync existed
-  `ALTER TABLE "vendors" ADD COLUMN IF NOT EXISTS "vendor_group" text`,
-  `ALTER TABLE "vendors" ADD COLUMN IF NOT EXISTS "gst_reg_type" text`,
-  `ALTER TABLE "vendors" ADD COLUMN IF NOT EXISTS "active" boolean NOT NULL DEFAULT true`,
-  `ALTER TABLE "items" ADD COLUMN IF NOT EXISTS "item_group" text`,
-  `ALTER TABLE "items" ADD COLUMN IF NOT EXISTS "hsn_code" text`,
-  `ALTER TABLE "items" ADD COLUMN IF NOT EXISTS "active" boolean NOT NULL DEFAULT true`,
+  ...MASTER_SYNC_COLUMNS,
 
   `CREATE TABLE IF NOT EXISTS "vendors" (
     "name" text PRIMARY KEY,
