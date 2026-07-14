@@ -25,6 +25,7 @@ export default async function Home({
   }
   const params = await searchParams;
   const denied = typeof params.denied === "string" ? params.denied : null;
+  const saved = typeof params.saved === "string" ? params.saved : null;
 
   const [grnQueue, priceQueue, shortages, priceQueries, readyList, recent] = await Promise.all([
     ["store", "partner"].includes(user.role) ? listGrnQueue() : Promise.resolve([]),
@@ -47,6 +48,14 @@ export default async function Home({
         <Link href="/dashboard" style={{ fontSize: 14 }}>
           📊 Dashboard
         </Link>
+      )}
+
+      {saved && (
+        <div className="card" style={{ borderColor: "var(--accent)" }}>
+          <p style={{ margin: 0 }}>
+            ✓ Bill <strong>{saved}</strong> saved.
+          </p>
+        </div>
       )}
 
       {denied && (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useActionState, useTransition } from "react";
+import { useEffect, useRef, useState, useActionState, useTransition } from "react";
 import { createBillAction, getItemOptionsAction, type ItemOption } from "./actions";
 
 interface LineItemRow {
@@ -34,6 +34,47 @@ export function NewBillForm({
   const [state, formAction, pending] = useActionState(createBillAction, {
     ok: true,
   });
+
+  // Photo selection (camera or file/scan) with preview
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoName, setPhotoName] = useState<string | null>(null);
+
+  function onPhotoChosen(which: "camera" | "file") {
+    const input = which === "camera" ? cameraRef.current : fileRef.current;
+    const other = which === "camera" ? fileRef.current : cameraRef.current;
+    const f = input?.files?.[0];
+    if (!f) return;
+    if (other) other.value = "";
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    setPhotoPreview(URL.createObjectURL(f));
+    setPhotoName(f.name);
+  }
+
+  function clearPhoto() {
+    if (cameraRef.current) cameraRef.current.value = "";
+    if (fileRef.current) fileRef.current.value = "";
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    setPhotoPreview(null);
+    setPhotoName(null);
+  }
+
+  // After "Save & next bill" succeeds, reset everything for the next entry
+  const [formKey, setFormKey] = useState(0);
+  const lastSavedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (state.ok && state.savedBillId && state.savedBillId !== lastSavedRef.current) {
+      lastSavedRef.current = state.savedBillId;
+      setVendorName("");
+      setRows([newRow()]);
+      setItemOptions(initialItems);
+      setPhotoPreview(null);
+      setPhotoName(null);
+      setFormKey((k) => k + 1); // remount form -> clears uncontrolled inputs
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [state, initialItems]);
 
   function onVendorBlur() {
     if (!vendorName.trim()) return;
@@ -72,8 +113,17 @@ export function NewBillForm({
   }, 0);
 
   return (
-    <form action={formAction}>
+    <form action={formAction} key={formKey}>
       <input type="hidden" name="itemsJson" value={itemsJson} />
+
+      {state.ok && state.savedBillId && (
+        <div className="card" style={{ borderColor: "var(--accent)" }}>
+          <p style={{ margin: 0 }}>
+            ✓ Bill <strong>{state.savedBillId}</strong> saved. Enter the next
+            bill below.
+          </p>
+        </div>
+      )}
 
       {!state.ok && state.error && (
         <div className="card" style={{ borderColor: "#b3261e" }}>
@@ -84,11 +134,70 @@ export function NewBillForm({
       <div className="card">
         <p className="sectionLabel">Bill photo</p>
         <input
+          ref={cameraRef}
+          type="file"
+          name="photoCamera"
+          accept="image/*"
+          capture="environment"
+          style={{ display: "none" }}
+          onChange={() => onPhotoChosen("camera")}
+        />
+        <input
+          ref={fileRef}
           type="file"
           name="photo"
           accept="image/*"
-          capture="environment"
+          style={{ display: "none" }}
+          onChange={() => onPhotoChosen("file")}
         />
+        <div className="grid2">
+          <button
+            type="button"
+            className="plain"
+            onClick={() => cameraRef.current?.click()}
+          >
+            📷 Take photo
+          </button>
+          <button
+            type="button"
+            className="plain"
+            onClick={() => fileRef.current?.click()}
+          >
+            📁 Choose file / scan
+          </button>
+        </div>
+        {photoPreview && (
+          <div style={{ marginTop: 12 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={photoPreview}
+              alt="Bill photo preview"
+              style={{
+                width: "100%",
+                maxHeight: 320,
+                objectFit: "contain",
+                border: "1px solid var(--line)",
+                borderRadius: 8,
+                background: "#fff",
+              }}
+            />
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginTop: 6,
+              }}
+            >
+              <span className="muted" style={{ fontSize: 13 }}>
+                {photoName} — check it&apos;s readable
+              </span>
+              <button type="button" className="linkBtn" onClick={clearPhoto}>
+                Remove
+              </button>
+            </div>
+          </div>
+        )}
 
         <p className="sectionLabel" style={{ marginTop: 20 }}>
           Vendor
@@ -201,9 +310,27 @@ export function NewBillForm({
         </p>
       </div>
 
-      <button className="primary" type="submit" disabled={pending}>
-        {pending ? "Saving…" : "Save bill"}
-      </button>
+      <div className="grid2" style={{ marginTop: 4 }}>
+        <button
+          className="primary"
+          type="submit"
+          name="saveMode"
+          value="next"
+          disabled={pending}
+        >
+          {pending ? "Saving…" : "Save & next bill"}
+        </button>
+        <button
+          className="primary"
+          type="submit"
+          name="saveMode"
+          value="close"
+          disabled={pending}
+          style={{ background: "#fff", color: "var(--accent)", border: "1px solid var(--accent)" }}
+        >
+          {pending ? "Saving…" : "Save & close"}
+        </button>
+      </div>
 
       <style jsx>{`
         .sectionLabel {

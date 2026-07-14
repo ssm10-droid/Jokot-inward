@@ -28,6 +28,7 @@ const HeaderInput = z.object({
 export interface CreateBillState {
   ok: boolean;
   error?: string;
+  savedBillId?: string;
 }
 
 export async function createBillAction(
@@ -85,9 +86,12 @@ export async function createBillAction(
     }
   }
 
-  // Photo upload (optional — camera capture on the gate device)
+  // Photo upload (optional — phone camera, gallery, or a scanned file)
   let billPhotoUrl: string | null = null;
-  const photo = formData.get("photo");
+  const photoCandidate = [formData.get("photo"), formData.get("photoCamera")].find(
+    (p) => p instanceof File && p.size > 0
+  );
+  const photo = photoCandidate ?? null;
   if (photo instanceof File && photo.size > 0) {
     const buf = Buffer.from(await photo.arrayBuffer());
     const ext = photo.type === "image/png" ? "png" : "jpg";
@@ -132,7 +136,12 @@ export async function createBillAction(
     itemCount: lineItems.length,
   });
 
-  redirect(`/bills/${billId}`);
+  const saveMode = String(formData.get("saveMode") ?? "close");
+  if (saveMode === "next") {
+    // Stay on the entry form — the client resets it for the next bill.
+    return { ok: true, savedBillId: billId };
+  }
+  redirect(`/?saved=${encodeURIComponent(billId)}`);
 }
 
 function optionalStr(v: FormDataEntryValue | null): string | undefined {
