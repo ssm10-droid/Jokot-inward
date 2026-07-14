@@ -71,6 +71,9 @@ export const vendors = pgTable("vendors", {
   gstin: text("gstin"),
   defaultPurchaseLedger: text("default_purchase_ledger"),
   state: text("state"), // used later for CGST+SGST vs IGST — captured now, not computed on
+  vendorGroup: text("vendor_group"), // Tally "Under" group, from the master sheet
+  gstRegType: text("gst_reg_type"), // e.g. Regular / Unregistered — accounts-facing only
+  active: boolean("active").notNull().default(true), // false = removed from master but kept for old bills
   billsCount: integer("bills_count").notNull().default(0),
 });
 
@@ -83,7 +86,10 @@ export const items = pgTable("items", {
   tallyStockItemName: text("tally_stock_item_name"),
   uom: text("uom"),
   type: itemTypeEnum("type").notNull().default("stock"),
-  gstPct: numeric("gst_pct", { precision: 5, scale: 2 }),
+  itemGroup: text("item_group"), // Tally "Under" group, from the master sheet
+  gstPct: numeric("gst_pct", { precision: 5, scale: 2 }), // accounts-facing only
+  hsnCode: text("hsn_code"), // accounts-facing only
+  active: boolean("active").notNull().default(true), // false = removed from master but kept for old bills
   timesUsed: integer("times_used").notNull().default(0),
 });
 

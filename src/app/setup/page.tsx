@@ -1,70 +1,140 @@
-import { sql } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { db } from "@/db";
-import { users, vendors, items, supplierItemMap } from "@/db/schema";
+import { users, vendors, items, supplierItemMap, bills, billItems } from "@/db/schema";
 import { SETUP_STATEMENTS } from "@/lib/setup-sql";
+import { buildSyncPlan, applySyncPlan, describePlan } from "@/lib/sheet-sync";
 import masterImportData from "@/data/master-import.json";
 
-function chunk<T>(arr: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
+// Published-to-web CSV links for the three master tabs of the Jokot master
+// Google Sheet — pre-filled in the sync form; editable there if the sheet
+// is ever republished under a new link.
+const DEFAULT_SHEET_BASE =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vSzUdwFcyTJetmFYM6FUsVRaT8y4uw3pYlmddF9j0RUue_7NDza4mHE3S_VjgznfMl8DJe-8nfdhEAj/pub";
+const DEFAULT_ITEM_URL = `${DEFAULT_SHEET_BASE}?gid=0&single=true&output=csv`;
+const DEFAULT_VENDOR_URL = `${DEFAULT_SHEET_BASE}?gid=1503885591&single=true&output=csv`;
+const DEFAULT_MAP_URL = `${DEFAULT_SHEET_BASE}?gid=1381933379&single=true&output=csv`;
+
+// The old one-time bundled AppSheet import has been superseded by the
+// Google-Sheets master-data sync below (the sheet is now the master).
+// src/data/master-import.json is kept in the repo purely as a historical
+// snapshot of what was originally seeded.
+void masterImportData;
+
+function checkSecret(formData: FormData): string | null {
+  const secret = String(formData.get("secret") ?? "").trim();
+  const expected = process.env.SETUP_SECRET?.trim();
+  if (!expected) return "SETUP_SECRET is not configured in Vercel environment variables.";
+  if (secret !== expected) return "Wrong setup secret.";
+  return null;
 }
 
 /**
- * One-time bulk import of the real vendor/item/mapping master data
- * (cleaned and deduped from the AppSheet export — see the chat where this
- * was generated for the cleaning steps). Bundled as JSON at build time so
- * this needs no paste-into-a-textarea step, and — importantly — several
- * real vendor names contain commas ("CEYENAR CHEMICALS PVT.LTD, Kerala"),
- * which would silently corrupt the comma-delimited textarea format below.
- * JSON has no such fragility.
- *
- * Batched inserts (not one row at a time) to stay well inside Vercel's
- * function time limit — ~806 rows in a handful of round trips instead of
- * hundreds. onConflictDoNothing: this is an initial-seed operation, so it
- * must never clobber data added or edited by hand afterward.
+ * Google-Sheets master-data sync. Preview computes and reports the full
+ * plan without writing anything; Apply recomputes and executes it. The
+ * sheet is the master: rows missing from it are deleted if never used on a
+ * bill, deactivated otherwise (hidden from all pickers, old bills intact).
  */
-async function importBundledMasterData(): Promise<string> {
-  let vendorsAdded = 0;
-  let itemsAdded = 0;
-  let mapAdded = 0;
+async function runSheetSync(formData: FormData): Promise<Result> {
+  const authErr = checkSecret(formData);
+  if (authErr) return { ok: false, lines: [authErr] };
 
-  for (const batch of chunk(masterImportData.vendors, 200)) {
-    const result = await db
-      .insert(vendors)
-      .values(batch)
-      .onConflictDoNothing()
-      .returning({ name: vendors.name });
-    vendorsAdded += result.length;
+  const vendorUrl = String(formData.get("vendorUrl") ?? "").trim();
+  const itemUrl = String(formData.get("itemUrl") ?? "").trim();
+  const mapUrl = String(formData.get("mapUrl") ?? "").trim();
+  if (!vendorUrl || !itemUrl || !mapUrl) {
+    return { ok: false, lines: ["All three sheet links are required."] };
   }
+  const apply = String(formData.get("mode")) === "apply";
 
-  for (const batch of chunk(masterImportData.items, 200)) {
-    const result = await db
-      .insert(items)
-      .values(batch.map((i) => ({ ...i, type: "stock" as const })))
-      .onConflictDoNothing()
-      .returning({ name: items.name });
-    itemsAdded += result.length;
+  try {
+    // Make sure the new columns exist even on a database created earlier.
+    for (const stmt of SETUP_STATEMENTS) {
+      await db.execute(sql.raw(stmt));
+    }
+    const plan = await buildSyncPlan(vendorUrl, itemUrl, mapUrl);
+    if (apply) await applySyncPlan(plan);
+    const lines = describePlan(plan, apply);
+    lines.push(
+      apply
+        ? "Sync applied — the app now follows the Google Sheet."
+        : "Preview only. Tap Apply sync to make these changes for real."
+    );
+    return { ok: true, lines };
+  } catch (e) {
+    return {
+      ok: false,
+      lines: [`Sync failed: ${e instanceof Error ? e.message : "unknown error"}. Nothing was left half-done on the vendor/item masters — fix and re-run.`],
+    };
   }
+}
 
-  for (const batch of chunk(masterImportData.supplierItemMap, 200)) {
-    const result = await db
-      .insert(supplierItemMap)
-      .values(
-        batch.map((m) => ({
-          id: `${m.supplierName}::${m.itemName}`,
-          supplierName: m.supplierName,
-          itemName: m.itemName,
-          isActive: true,
-        }))
-      )
-      .onConflictDoNothing()
-      .returning({ id: supplierItemMap.id });
-    mapAdded += result.length;
+/**
+ * Admin-only single-entry removal, for fixing mistakes: deletes the vendor
+ * or item outright if no bill has ever used it, deactivates it otherwise.
+ * Its vendor-item mappings are removed either way.
+ */
+async function runMasterDelete(formData: FormData): Promise<Result> {
+  const authErr = checkSecret(formData);
+  if (authErr) return { ok: false, lines: [authErr] };
+
+  const kind = String(formData.get("kind") ?? "");
+  const name = String(formData.get("name") ?? "").replace(/\s+/g, " ").trim();
+  if (!name) return { ok: false, lines: ["Type the exact vendor or item name to remove."] };
+
+  try {
+    if (kind === "vendor") {
+      const found = await db
+        .select({ name: vendors.name })
+        .from(vendors)
+        .where(sql`lower(${vendors.name}) = lower(${name})`);
+      if (found.length === 0) return { ok: false, lines: [`No vendor named "${name}" found.`] };
+      const exact = found[0].name;
+      const used = await db
+        .select({ id: bills.id })
+        .from(bills)
+        .where(eq(bills.vendorName, exact))
+        .limit(1);
+      await db.delete(supplierItemMap).where(eq(supplierItemMap.supplierName, exact));
+      if (used.length > 0) {
+        await db.update(vendors).set({ active: false }).where(eq(vendors.name, exact));
+        return {
+          ok: true,
+          lines: [`"${exact}" is used on existing bills, so it was deactivated instead of deleted — it no longer appears anywhere in daily work, and old bills stay intact.`],
+        };
+      }
+      await db.delete(vendors).where(eq(vendors.name, exact));
+      return { ok: true, lines: [`Vendor "${exact}" deleted.`] };
+    }
+
+    if (kind === "item") {
+      const found = await db
+        .select({ name: items.name })
+        .from(items)
+        .where(sql`lower(${items.name}) = lower(${name})`);
+      if (found.length === 0) return { ok: false, lines: [`No item named "${name}" found.`] };
+      const exact = found[0].name;
+      const used = await db
+        .select({ id: billItems.id })
+        .from(billItems)
+        .where(eq(billItems.itemName, exact))
+        .limit(1);
+      await db.delete(supplierItemMap).where(eq(supplierItemMap.itemName, exact));
+      if (used.length > 0) {
+        await db.update(items).set({ active: false }).where(eq(items.name, exact));
+        return {
+          ok: true,
+          lines: [`"${exact}" is used on existing bills, so it was deactivated instead of deleted — it no longer appears anywhere in daily work, and old bills stay intact.`],
+        };
+      }
+      await db.delete(items).where(eq(items.name, exact));
+      return { ok: true, lines: [`Item "${exact}" deleted.`] };
+    }
+
+    return { ok: false, lines: ["Choose whether it's a vendor or an item."] };
+  } catch (e) {
+    return { ok: false, lines: [`Delete failed: ${e instanceof Error ? e.message : "unknown error"}`] };
   }
-
-  return `Bundled master data imported: ${vendorsAdded} new vendors, ${itemsAdded} new items, ${mapAdded} new vendor-item mappings (existing rows left untouched).`;
 }
 
 /**
@@ -83,29 +153,14 @@ async function runSetup(formData: FormData): Promise<Result> {
   "use server";
   const lines: string[] = [];
 
-  const secret = String(formData.get("secret") ?? "").trim();
-  const expected = process.env.SETUP_SECRET?.trim();
-  if (!expected || secret !== expected) {
-    return {
-      ok: false,
-      lines: [
-        !expected
-          ? "SETUP_SECRET is not configured in Vercel environment variables."
-          : "Wrong setup secret.",
-      ],
-    };
-  }
+  const authErr = checkSecret(formData);
+  if (authErr) return { ok: false, lines: [authErr] };
 
   // 1. Tables
   for (const stmt of SETUP_STATEMENTS) {
     await db.execute(sql.raw(stmt));
   }
   lines.push("Tables created (or already present).");
-
-  // 1.5 Bundled master data import (one-time, real vendor/item/mapping data)
-  if (formData.get("importBundled") === "on") {
-    lines.push(await importBundledMasterData());
-  }
 
   // 2. Users — one per line: email, name, role, password
   // Re-running with a new password resets that user's password.
@@ -255,6 +310,22 @@ export default async function SetupPage({
     redirect(`/setup?done=${result.ok ? "1" : "0"}&msg=${msg}`);
   }
 
+  async function syncAction(formData: FormData) {
+    "use server";
+    const result = await runSheetSync(formData);
+    const { redirect } = await import("next/navigation");
+    const msg = encodeURIComponent(result.lines.join(" | "));
+    redirect(`/setup?done=${result.ok ? "1" : "0"}&msg=${msg}`);
+  }
+
+  async function deleteAction(formData: FormData) {
+    "use server";
+    const result = await runMasterDelete(formData);
+    const { redirect } = await import("next/navigation");
+    const msg = encodeURIComponent(result.lines.join(" | "));
+    redirect(`/setup?done=${result.ok ? "1" : "0"}&msg=${msg}`);
+  }
+
   const params = await searchParams;
   const done = params.done;
   const msg = typeof params.msg === "string" ? decodeURIComponent(params.msg) : null;
@@ -282,6 +353,77 @@ export default async function SetupPage({
       )}
 
       <div className="card">
+        <h2 style={{ marginTop: 0 }}>Master data — sync from Google Sheets</h2>
+        <p className="muted" style={{ fontSize: 14 }}>
+          The Google Sheet is the master list. Syncing loads every vendor,
+          item, and vendor-item mapping from the three published tabs and
+          removes anything no longer on them (entries already used on bills
+          are deactivated instead of deleted, so old bills stay intact).
+          Always run <b>Preview</b> first — it shows exactly what will
+          change without touching anything.
+        </p>
+        <form action={syncAction}>
+          <label className="muted">Setup secret</label>
+          <input
+            name="secret"
+            type="password"
+            required
+            style={inputStyle}
+            autoComplete="off"
+          />
+          <label className="muted">Item master tab (published CSV link)</label>
+          <input name="itemUrl" defaultValue={DEFAULT_ITEM_URL} required style={urlStyle} />
+          <label className="muted">Vendor master tab (published CSV link)</label>
+          <input name="vendorUrl" defaultValue={DEFAULT_VENDOR_URL} required style={urlStyle} />
+          <label className="muted">Supplier-item map tab (published CSV link)</label>
+          <input name="mapUrl" defaultValue={DEFAULT_MAP_URL} required style={urlStyle} />
+          <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+            <button type="submit" name="mode" value="preview" style={{ flex: 1 }}>
+              Preview changes
+            </button>
+            <button className="primary" type="submit" name="mode" value="apply" style={{ flex: 1 }}>
+              Apply sync
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div className="card">
+        <h2 style={{ marginTop: 0 }}>Remove one vendor or item</h2>
+        <p className="muted" style={{ fontSize: 14 }}>
+          For fixing a mistaken entry. Type the exact name (copy it from the
+          app or the sheet). If it has never been used on a bill it is
+          deleted; if it has, it is deactivated — hidden from every screen,
+          old bills untouched. Note: the next sheet sync will re-add it if
+          it is still on the sheet, so remove it there too.
+        </p>
+        <form action={deleteAction}>
+          <label className="muted">Setup secret</label>
+          <input
+            name="secret"
+            type="password"
+            required
+            style={inputStyle}
+            autoComplete="off"
+          />
+          <label className="muted">What to remove</label>
+          <select name="kind" required style={inputStyle} defaultValue="">
+            <option value="" disabled>
+              Choose…
+            </option>
+            <option value="vendor">Vendor</option>
+            <option value="item">Item</option>
+          </select>
+          <label className="muted">Exact name</label>
+          <input name="name" required style={inputStyle} autoComplete="off" />
+          <button className="primary" type="submit">
+            Remove entry
+          </button>
+        </form>
+      </div>
+
+      <div className="card">
+        <h2 style={{ marginTop: 0 }}>Tables, users &amp; manual additions</h2>
         <form action={action}>
           <label className="muted">Setup secret</label>
           <input
@@ -291,26 +433,6 @@ export default async function SetupPage({
             style={inputStyle}
             autoComplete="off"
           />
-
-          <div
-            style={{
-              border: "1px solid var(--accent)",
-              borderRadius: 8,
-              padding: 12,
-              margin: "0 0 16px",
-              background: "#f2f7f5",
-            }}
-          >
-            <label style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-              <input type="checkbox" name="importBundled" style={{ marginTop: 3 }} />
-              <span style={{ fontSize: 14 }}>
-                Import the real vendor/item/mapping data from the AppSheet
-                export (88 vendors, 317 items, 401 vendor-item mappings).
-                Safe to check every time you run setup — already-imported
-                rows are skipped, nothing gets overwritten.
-              </span>
-            </label>
-          </div>
 
           <label className="muted">
             Users — one per line: email, name, role, password
@@ -381,6 +503,18 @@ export default async function SetupPage({
     </main>
   );
 }
+
+const urlStyle: React.CSSProperties = {
+  display: "block",
+  width: "100%",
+  margin: "6px 0 16px",
+  padding: "10px 12px",
+  border: "1px solid var(--line)",
+  borderRadius: 8,
+  fontSize: 12,
+  fontFamily: "monospace",
+  background: "#fff",
+};
 
 const inputStyle: React.CSSProperties = {
   display: "block",

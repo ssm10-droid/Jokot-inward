@@ -182,3 +182,44 @@ changing related code:
    a throwaway `tsx` script and actually open the output — typecheck and
    build passing does NOT guarantee `@react-pdf/renderer` produces a
    correct-looking document.
+
+## Master data: Google Sheets is now the source of truth (July 2026)
+
+The bundled AppSheet JSON import on `/setup` was replaced by a
+**sync-from-Google-Sheets** feature. One Google Sheet (published to web)
+holds three tabs: Item master (gid=0), Vendor master (gid=1503885591),
+Supplier-item map (gid=1381933379). The published CSV links are
+pre-filled as defaults in `/setup`; logic lives in
+`src/lib/sheet-sync.ts`.
+
+Semantics (per the owner's explicit instruction — replace, not merge):
+
+- The sheet is the master. Sync upserts everything on it and removes DB
+  rows no longer on it: **deleted if never used on a bill, deactivated
+  (`active = false`) if used** — hard deletes of referenced rows would
+  break the bills FK. Deactivated rows disappear from every picker
+  (`listVendors`/`listAllItems` filter `active = true`) but old bills
+  render fine.
+- Two-step: **Preview** (dry run, writes nothing — safe on any
+  deployment) then **Apply** (recomputes and executes). Always preview
+  first.
+- Supplier-item map tab is fully rebuilt on each sync. Names are matched
+  case-insensitively against the two master tabs; rows that don't match
+  are skipped and listed in the report (the sheet has known typos, e.g.
+  "DIKISHA PACKAGEING", "Haryan Impex", "NOOH INTERIOS", and a stray
+  "Grand Total" row). Duplicates are skipped. Junk names ("", "0",
+  "Grand Total") are ignored on all tabs.
+- New columns: vendors get `vendor_group`, `gst_reg_type`, `active`;
+  items get `item_group`, `hsn_code`, `active` (plus existing `gst_pct`
+  now populated). Idempotent ALTERs are in `setup-sql.ts`.
+- **GST % and HSN are accounts-facing only** (owner's instruction):
+  shown on the accounts Post-to-Tally bill page. Gate/Store/Purchase
+  screens keep working in basic GST-exclusive rates and must not
+  surface these fields.
+- `/setup` also gained an admin-only "Remove one vendor or item" form
+  (same delete-if-unused / deactivate-if-used rule; also clears its
+  supplier-item-map rows). A sheet sync will re-add the entry if it's
+  still on the sheet.
+- Users are deliberately NOT synced from the sheet (plaintext passwords
+  on a published sheet would be readable by anyone with the link); user
+  management stays on the `/setup` form.

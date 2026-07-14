@@ -50,7 +50,7 @@ export async function createBillAction(
   const header = headerParsed.data;
 
   const vendor = await getVendor(header.vendorName);
-  if (!vendor) {
+  if (!vendor || !vendor.active) {
     return {
       ok: false,
       error: `"${header.vendorName}" isn't in the vendor list. Pick one from the suggestions, or ask a partner to add it via /setup.`,
@@ -76,7 +76,7 @@ export async function createBillAction(
   for (const li of lineItems) {
     if (!validNames.has(li.itemName)) {
       const exists = await getItem(li.itemName);
-      if (!exists) {
+      if (!exists || !exists.active) {
         return {
           ok: false,
           error: `"${li.itemName}" isn't in the item list. Pick from the suggestions.`,

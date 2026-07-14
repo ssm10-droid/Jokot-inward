@@ -1,4 +1,4 @@
-import { eq, and, desc, asc, isNotNull, isNull } from "drizzle-orm";
+import { eq, and, desc, asc, isNotNull, isNull, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
   vendors,
@@ -14,11 +14,19 @@ import {
 } from "@/db/schema";
 
 export async function listVendors(): Promise<Vendor[]> {
-  return db.query.vendors.findMany({ orderBy: asc(vendors.name) });
+  // Only active vendors appear in pickers; deactivated ones (removed from
+  // the master sheet but referenced by old bills) stay out of daily work.
+  return db.query.vendors.findMany({
+    where: eq(vendors.active, true),
+    orderBy: asc(vendors.name),
+  });
 }
 
 export async function listAllItems(): Promise<Item[]> {
-  return db.query.items.findMany({ orderBy: asc(items.name) });
+  return db.query.items.findMany({
+    where: eq(items.active, true),
+    orderBy: asc(items.name),
+  });
 }
 
 /**
@@ -56,6 +64,22 @@ export async function getItem(name: string): Promise<Item | undefined> {
 
 export async function getVendor(name: string): Promise<Vendor | undefined> {
   return db.query.vendors.findFirst({ where: eq(vendors.name, name) });
+}
+
+/**
+ * GST % and HSN code per item name — shown only on the accounts side.
+ * Gate/Store/Purchase screens deal in basic (GST-exclusive) rates and never
+ * surface these fields.
+ */
+export async function gstInfoForItems(
+  names: string[]
+): Promise<Map<string, { gstPct: string | null; hsnCode: string | null }>> {
+  if (names.length === 0) return new Map();
+  const rows = await db
+    .select({ name: items.name, gstPct: items.gstPct, hsnCode: items.hsnCode })
+    .from(items)
+    .where(inArray(items.name, names));
+  return new Map(rows.map((r) => [r.name, { gstPct: r.gstPct, hsnCode: r.hsnCode }]));
 }
 
 export interface BillWithItems {

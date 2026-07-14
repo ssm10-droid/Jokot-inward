@@ -29,6 +29,14 @@ export const SETUP_STATEMENTS: string[] = [
   // For databases created before password auth existed
   `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "password_hash" text`,
 
+  // For databases created before the Google-Sheets master-data sync existed
+  `ALTER TABLE "vendors" ADD COLUMN IF NOT EXISTS "vendor_group" text`,
+  `ALTER TABLE "vendors" ADD COLUMN IF NOT EXISTS "gst_reg_type" text`,
+  `ALTER TABLE "vendors" ADD COLUMN IF NOT EXISTS "active" boolean NOT NULL DEFAULT true`,
+  `ALTER TABLE "items" ADD COLUMN IF NOT EXISTS "item_group" text`,
+  `ALTER TABLE "items" ADD COLUMN IF NOT EXISTS "hsn_code" text`,
+  `ALTER TABLE "items" ADD COLUMN IF NOT EXISTS "active" boolean NOT NULL DEFAULT true`,
+
   `CREATE TABLE IF NOT EXISTS "vendors" (
     "name" text PRIMARY KEY,
     "tally_ledger_name" text,
