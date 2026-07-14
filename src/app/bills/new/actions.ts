@@ -94,7 +94,12 @@ export async function createBillAction(
   const photo = photoCandidate ?? null;
   if (photo instanceof File && photo.size > 0) {
     const buf = Buffer.from(await photo.arrayBuffer());
-    const ext = photo.type === "image/png" ? "png" : "jpg";
+    const ext =
+      photo.type === "image/png"
+        ? "png"
+        : photo.type === "application/pdf"
+          ? "pdf"
+          : "jpg";
     billPhotoUrl = await uploadBuffer(
       `bills/pending/${Date.now()}.${ext}`,
       buf,

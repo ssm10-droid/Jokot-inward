@@ -40,6 +40,7 @@ export function NewBillForm({
   const fileRef = useRef<HTMLInputElement>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoName, setPhotoName] = useState<string | null>(null);
+  const [photoIsPdf, setPhotoIsPdf] = useState(false);
 
   function onPhotoChosen(which: "camera" | "file") {
     const input = which === "camera" ? cameraRef.current : fileRef.current;
@@ -48,7 +49,9 @@ export function NewBillForm({
     if (!f) return;
     if (other) other.value = "";
     if (photoPreview) URL.revokeObjectURL(photoPreview);
-    setPhotoPreview(URL.createObjectURL(f));
+    const isPdf = f.type === "application/pdf";
+    setPhotoIsPdf(isPdf);
+    setPhotoPreview(isPdf ? null : URL.createObjectURL(f));
     setPhotoName(f.name);
   }
 
@@ -58,6 +61,7 @@ export function NewBillForm({
     if (photoPreview) URL.revokeObjectURL(photoPreview);
     setPhotoPreview(null);
     setPhotoName(null);
+    setPhotoIsPdf(false);
   }
 
   // After "Save & next bill" succeeds, reset everything for the next entry
@@ -71,6 +75,7 @@ export function NewBillForm({
       setItemOptions(initialItems);
       setPhotoPreview(null);
       setPhotoName(null);
+      setPhotoIsPdf(false);
       setFormKey((k) => k + 1); // remount form -> clears uncontrolled inputs
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
@@ -146,7 +151,7 @@ export function NewBillForm({
           ref={fileRef}
           type="file"
           name="photo"
-          accept="image/*"
+          accept="image/*,application/pdf"
           style={{ display: "none" }}
           onChange={() => onPhotoChosen("file")}
         />
@@ -166,21 +171,40 @@ export function NewBillForm({
             📁 Choose file / scan
           </button>
         </div>
-        {photoPreview && (
+        {(photoPreview || photoIsPdf) && (
           <div style={{ marginTop: 12 }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={photoPreview}
-              alt="Bill photo preview"
-              style={{
-                width: "100%",
-                maxHeight: 320,
-                objectFit: "contain",
-                border: "1px solid var(--line)",
-                borderRadius: 8,
-                background: "#fff",
-              }}
-            />
+            {photoIsPdf ? (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "14px 12px",
+                  border: "1px solid var(--line)",
+                  borderRadius: 8,
+                  background: "#fff",
+                }}
+              >
+                <span style={{ fontSize: 22 }}>📄</span>
+                <span style={{ fontSize: 14, wordBreak: "break-all" }}>
+                  {photoName}
+                </span>
+              </div>
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={photoPreview!}
+                alt="Bill photo preview"
+                style={{
+                  width: "100%",
+                  maxHeight: 320,
+                  objectFit: "contain",
+                  border: "1px solid var(--line)",
+                  borderRadius: 8,
+                  background: "#fff",
+                }}
+              />
+            )}
             <div
               style={{
                 display: "flex",
@@ -190,7 +214,7 @@ export function NewBillForm({
               }}
             >
               <span className="muted" style={{ fontSize: 13 }}>
-                {photoName} — check it&apos;s readable
+                {photoIsPdf ? "PDF attached" : `${photoName} — check it's readable`}
               </span>
               <button type="button" className="linkBtn" onClick={clearPhoto}>
                 Remove
@@ -198,6 +222,16 @@ export function NewBillForm({
             </div>
           </div>
         )}
+
+        <p className="muted" style={{ fontSize: 12.5, marginTop: 10, lineHeight: 1.5 }}>
+          For a clearer copy than a plain photo: on a phone, tap{" "}
+          <strong>Choose file / scan</strong> → Browse/Files →{" "}
+          <strong>Scan Documents</strong> — this uses the built-in scanner
+          that auto-crops and straightens the page. On a computer connected
+          to a printer/scanner, scan the bill first (saved as JPG, PNG, or
+          PDF), then tap <strong>Choose file / scan</strong> to attach that
+          file.
+        </p>
 
         <p className="sectionLabel" style={{ marginTop: 20 }}>
           Vendor
