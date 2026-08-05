@@ -220,6 +220,22 @@ export const auditLog = pgTable("audit_log", {
 });
 
 // ---------------------------------------------------------------------------
+// notifications — dedupe ledger for escalation emails. One row per
+// (bill, kind) means "this escalation has already been sent, don't repeat".
+// kind examples: esc:store_check, esc:price_check, esc:shortage,
+// esc:price_query, esc:accounts
+// ---------------------------------------------------------------------------
+
+export const notifications = pgTable("notifications", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  billId: text("bill_id")
+    .notNull()
+    .references(() => bills.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
 // counters — atomic sequences for bill IDs (PB26-####) and daily GRN numbers.
 // A single INSERT..ON CONFLICT..RETURNING is concurrency-safe over Neon's
 // stateless HTTP driver, where advisory transaction locks are not.

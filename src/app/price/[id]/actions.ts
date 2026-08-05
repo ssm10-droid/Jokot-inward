@@ -8,6 +8,7 @@ import { requireRole } from "@/lib/authz";
 import { getBillWithItems } from "@/lib/data";
 import { derive } from "@/lib/derive";
 import { logAction } from "@/lib/audit";
+import { notifyAssigned } from "@/lib/notify";
 
 export interface ActionState {
   ok: boolean;
@@ -85,6 +86,16 @@ export async function approveRatesAction(billId: string): Promise<ActionState> {
   await logAction(billId, "rates_approved", actor.email, {
     discrepancyCount: d.rateDiscrepancyCount,
   });
+
+  // Best-effort: if the quantity side is also clear, Accounts is next.
+  if (bill.grnStatus === "ok") {
+    await notifyAssigned(
+      ["accounts"],
+      billId,
+      bill.vendorName,
+      "post to Tally (both checks clear)"
+    );
+  }
 
   redirect(`/bills/${billId}`);
 }

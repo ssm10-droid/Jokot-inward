@@ -9,6 +9,7 @@ import { nextBillId } from "@/lib/ids";
 import { getVendor, getItem, itemsForVendor } from "@/lib/data";
 import { logAction } from "@/lib/audit";
 import { uploadBuffer } from "@/lib/blob";
+import { notifyAssigned } from "@/lib/notify";
 
 const LineItemInput = z.object({
   itemName: z.string().min(1),
@@ -131,6 +132,14 @@ export async function createBillAction(
     vendorName: header.vendorName,
     itemCount: lineItems.length,
   });
+
+  // Best-effort: tell Store + Purchase a new bill is waiting on them.
+  await notifyAssigned(
+    ["store", "purchase"],
+    billId,
+    header.vendorName,
+    "quantity check (Store) and rate check (Purchase)"
+  );
 
   redirect(`/bills/${billId}`);
 }

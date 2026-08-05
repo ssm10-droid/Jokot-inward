@@ -13,6 +13,7 @@ import { logAction } from "@/lib/audit";
 import { uploadBuffer } from "@/lib/blob";
 import { GrnNoteDocument } from "@/lib/pdf/grn-note";
 import { VendorShortageDocument } from "@/lib/pdf/vendor-shortage";
+import { notifyAssigned } from "@/lib/notify";
 
 export interface ActionState {
   ok: boolean;
@@ -156,6 +157,23 @@ export async function confirmGrnAction(billId: string): Promise<ActionState> {
     shortLinesCount: d.shortLinesCount,
     grnNo,
   });
+
+  // Best-effort stage-entry notifications
+  if (grnStatus === "short") {
+    await notifyAssigned(
+      ["purchase"],
+      billId,
+      bill.vendorName,
+      `vendor shortage resolution (${d.shortLinesCount} short line${d.shortLinesCount === 1 ? "" : "s"})`
+    );
+  } else if (bill.priceStatus === "approved") {
+    await notifyAssigned(
+      ["accounts"],
+      billId,
+      bill.vendorName,
+      "post to Tally (both checks clear)"
+    );
+  }
 
   redirect(`/bills/${billId}`);
 }

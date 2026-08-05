@@ -17,7 +17,13 @@ export const authConfig: NextAuthConfig = {
       // /setup is protected by SETUP_SECRET, /export by its own token
       // param — neither can rely on a session (Google Sheets' IMPORTDATA
       // can't send a login cookie), so both bypass the session check here.
-      if (path.startsWith("/login") || path.startsWith("/setup") || path.startsWith("/export"))
+      // /api/cron is protected by CRON_SECRET (scheduled curl can't log in)
+      if (
+        path.startsWith("/login") ||
+        path.startsWith("/setup") ||
+        path.startsWith("/export") ||
+        path.startsWith("/api/cron")
+      )
         return true;
       return isLoggedIn; // false -> redirect to /login
     },

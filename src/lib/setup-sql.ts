@@ -106,6 +106,13 @@ export const SETUP_STATEMENTS: string[] = [
     "updated_at" timestamptz NOT NULL DEFAULT now()
   )`,
 
+  `CREATE TABLE IF NOT EXISTS "notifications" (
+    "id" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    "bill_id" text NOT NULL REFERENCES "bills"("id") ON DELETE CASCADE,
+    "kind" text NOT NULL,
+    "sent_at" timestamptz NOT NULL DEFAULT now()
+  )`,
+
   `CREATE TABLE IF NOT EXISTS "counters" (
     "key" text PRIMARY KEY,
     "value" integer NOT NULL DEFAULT 0

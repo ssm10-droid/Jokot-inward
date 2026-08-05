@@ -1,0 +1,31 @@
+# Escalation sweep — runs every ~5 minutes on GitHub's infrastructure,
+# because Vercel Hobby cron only allows one run per day.
+#
+# NOTE: scheduled workflows only run from the DEFAULT branch (main), so this
+# activates once trial-notifications is merged. During the trial, test the
+# endpoint by opening the cron URL directly in Safari against the preview
+# deployment, or use the "Run workflow" button in the Actions tab.
+#
+# Requires two repository secrets (Settings → Secrets and variables →
+# Actions → New repository secret):
+#   CRON_URL    e.g. https://jokot-inward.vercel.app/api/cron/check-pending
+#   CRON_SECRET must match the CRON_SECRET env var in Vercel
+
+name: Notification escalation sweep
+
+on:
+  schedule:
+    - cron: "*/5 * * * *" # GitHub may delay these a few minutes; fine for a 20-min SLA
+  workflow_dispatch: {}
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit the escalation endpoint
+        run: |
+          if [ -z "${{ secrets.CRON_URL }}" ] || [ -z "${{ secrets.CRON_SECRET }}" ]; then
+            echo "CRON_URL / CRON_SECRET repository secrets not set — skipping."
+            exit 0
+          fi
+          curl -fsS "${{ secrets.CRON_URL }}?token=${{ secrets.CRON_SECRET }}"

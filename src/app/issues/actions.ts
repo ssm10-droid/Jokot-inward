@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { bills } from "@/db/schema";
 import { requireRole } from "@/lib/authz";
 import { logAction } from "@/lib/audit";
+import { notifyAssigned } from "@/lib/notify";
 
 export interface ActionState {
   ok: boolean;
@@ -53,6 +54,16 @@ export async function resolveShortageAction(
     resolutionType,
   });
 
+  // Best-effort: if the price side is also clear, Accounts is next.
+  if (bill.priceStatus === "approved") {
+    await notifyAssigned(
+      ["accounts"],
+      billId,
+      bill.vendorName,
+      "post to Tally (both checks clear)"
+    );
+  }
+
   return { ok: true };
 }
 
@@ -86,6 +97,16 @@ export async function resolvePriceQueryAction(
     .where(eq(bills.id, billId));
 
   await logAction(billId, "price_query_resolved", actor.email, { notes });
+
+  // Best-effort: if the quantity side is also clear, Accounts is next.
+  if (bill.grnStatus === "ok") {
+    await notifyAssigned(
+      ["accounts"],
+      billId,
+      bill.vendorName,
+      "post to Tally (both checks clear)"
+    );
+  }
 
   return { ok: true };
 }
