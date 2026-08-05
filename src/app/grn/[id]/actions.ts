@@ -164,7 +164,8 @@ export async function confirmGrnAction(billId: string): Promise<ActionState> {
       ["purchase"],
       billId,
       bill.vendorName,
-      `vendor shortage resolution (${d.shortLinesCount} short line${d.shortLinesCount === 1 ? "" : "s"})`
+      `vendor shortage resolution (${d.shortLinesCount} short line${d.shortLinesCount === 1 ? "" : "s"})`,
+      "/issues"
     );
   } else if (bill.priceStatus === "approved") {
     await notifyAssigned(

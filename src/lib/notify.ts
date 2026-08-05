@@ -77,7 +77,49 @@ async function resolveRecipients(
   return { to: unique, note: "" };
 }
 
-const APP_URL = process.env.APP_URL || "https://jokot-inward.vercel.app";
+// Link base for emails: explicit APP_URL wins; otherwise use Vercel's own
+// stable branch URL (so trial-branch emails link to the trial deployment,
+// and production emails link to production) — no per-environment config.
+const APP_URL =
+  process.env.APP_URL ||
+  (process.env.VERCEL_BRANCH_URL && `https://${process.env.VERCEL_BRANCH_URL}`) ||
+  (process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`) ||
+  "https://jokot-inward.vercel.app";
+
+/**
+ * The action screen for a role on a given bill. Emails link here (via the
+ * login page with callbackUrl, so signing in lands the person directly on
+ * the decision screen — no navigating).
+ */
+export function actionPath(role: Role, billId: string): string {
+  switch (role) {
+    case "store":
+      return `/grn/${billId}`;
+    case "purchase":
+      return `/price/${billId}`;
+    case "accounts":
+      return `/accounts/${billId}`;
+    default:
+      return `/bills/${billId}`;
+  }
+}
+
+function deepLink(path: string): string {
+  return `${APP_URL}/login?callbackUrl=${encodeURIComponent(path)}`;
+}
+
+function linksBlock(roles: Role[], billId: string, issuePath?: string): string {
+  const lines = roles.map((r) => {
+    const path = issuePath && r === "purchase" ? issuePath : actionPath(r, billId);
+    const label =
+      r === "store" ? "Store — check quantities" :
+      r === "purchase" ? "Purchase — take action" :
+      r === "accounts" ? "Accounts — post to Tally" :
+      "Open bill";
+    return `${label}:\n${deepLink(path)}`;
+  });
+  return lines.join("\n\n");
+}
 
 /**
  * Immediate "this is now waiting on you" email, fired from server actions
@@ -87,14 +129,15 @@ export async function notifyAssigned(
   roles: Role[],
   billId: string,
   vendorName: string,
-  what: string
+  what: string,
+  issuePath?: string
 ): Promise<void> {
   try {
     const { to, note } = await resolveRecipients(roles);
     await sendEmail(
       to,
       `[Jokot Inward] ${billId} — ${what}`,
-      `Bill ${billId} (${vendorName}) is now waiting on you: ${what}.\n\nOpen it: ${APP_URL}/bills/${billId}${note}`
+      `Bill ${billId} (${vendorName}) is now waiting on you: ${what}.\n\nTap your link, sign in, and you land straight on the decision screen:\n\n${linksBlock(roles, billId, issuePath)}${note}`
     );
   } catch (err) {
     console.error("notifyAssigned failed:", err);
@@ -112,7 +155,8 @@ export async function notifyEscalation(
   roles: Role[],
   vendorName: string,
   what: string,
-  waitingSinceMin: number
+  waitingSinceMin: number,
+  issuePath?: string
 ): Promise<"sent" | "already" | "failed"> {
   const dedupeKey = `esc:${key}`;
   const existing = await db.query.notifications.findFirst({

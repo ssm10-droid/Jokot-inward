@@ -12,18 +12,28 @@ export default async function LoginPage({
 
   const params = await searchParams;
   const failed = params.error === "1";
+  // Deep links (e.g. from notification emails) arrive as ?callbackUrl=...
+  // Only ever honor relative in-app paths — never an absolute URL.
+  const rawCb = typeof params.callbackUrl === "string" ? params.callbackUrl : "";
+  const callbackUrl =
+    rawCb.startsWith("/") && !rawCb.startsWith("//") ? rawCb : "/";
 
   async function login(formData: FormData) {
     "use server";
+    const target = String(formData.get("callbackUrl") ?? "/");
+    const safeTarget =
+      target.startsWith("/") && !target.startsWith("//") ? target : "/";
     try {
       await signIn("credentials", {
         email: formData.get("email"),
         password: formData.get("password"),
-        redirectTo: "/",
+        redirectTo: safeTarget,
       });
     } catch (error) {
       if (error instanceof AuthError) {
-        redirect("/login?error=1");
+        redirect(
+          `/login?error=1&callbackUrl=${encodeURIComponent(safeTarget)}`
+        );
       }
       throw error; // NEXT_REDIRECT must pass through
     }
@@ -41,6 +51,7 @@ export default async function LoginPage({
           </p>
         )}
         <form action={login}>
+          <input type="hidden" name="callbackUrl" value={callbackUrl} />
           <label className="muted">Email</label>
           <input
             name="email"

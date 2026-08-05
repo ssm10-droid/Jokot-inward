@@ -21,6 +21,7 @@ interface Blocker {
   roles: Role[]; // who is responsible
   what: string; // human description
   since: Date | null; // when this blocker started
+  issuePath?: string; // override link for purchase (issues screen)
 }
 
 function openBlockers(bill: Bill): Blocker[] {
@@ -43,6 +44,7 @@ function openBlockers(bill: Bill): Blocker[] {
       roles: ["purchase"],
       what: "Purchase: vendor shortage resolution",
       since: bill.grnCheckedDate,
+      issuePath: "/issues",
     });
   }
 
@@ -60,6 +62,7 @@ function openBlockers(bill: Bill): Blocker[] {
       roles: ["purchase"],
       what: "Purchase: open price query",
       since: bill.priceDate,
+      issuePath: "/issues",
     });
   }
 
@@ -114,7 +117,8 @@ export async function GET(request: Request) {
         b.roles,
         bill.vendorName,
         b.what,
-        Math.floor(waitedMs / 60000)
+        Math.floor(waitedMs / 60000),
+        b.issuePath
       );
       results[outcome].push(label);
     }
